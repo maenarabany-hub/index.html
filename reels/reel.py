@@ -416,7 +416,7 @@ def apply_edl(src, segs, dst, remap):
                 continue
             a, b, o = where(w["start"])
             out.append(dict(w, start=ns, end=round(o + remap(min(w["end"], b)) - remap(a), 3)))
-        return out
+        return sorted(out, key=lambda w: w["start"])   # ordre du montage, pas des rushes
     return dst, tmap, spec, words
 
 
