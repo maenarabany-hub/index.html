@@ -27,5 +27,16 @@
   "ed_word_color": "#5A1419",
   "ed_label_text": "#5A1419",
   "ed_grade": false,
-  "ed_bg_dim": 1.0
+  "ed_bg_dim": 1.0,
+  "min_phrases": [
+    "nulle part",
+    "UN truc",
+    "glow up",
+    "Becoming Her",
+    "en commentaire",
+    "en chemin",
+    "danse urbaine",
+    "le plafond",
+    "de ma vie"
+  ]
 }

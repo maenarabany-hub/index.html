@@ -240,6 +240,9 @@ class Segmenter:
         rgb = np.ascontiguousarray(small[:, :, ::-1])
         r = self.seg.segment(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb))
         m = 1.0 - r.confidence_masks[0].numpy_view().reshape(small.shape[:2])
+        skin = r.confidence_masks[2].numpy_view().reshape(small.shape[:2])
+        self.skin = cv2.resize(np.clip((skin - 0.3) / 0.4, 0, 1).astype(np.float32),
+                               (bgr.shape[1], bgr.shape[0]), interpolation=cv2.INTER_LINEAR)[:, :, None]
         m = np.clip((m - 0.25) / 0.5, 0, 1).astype(np.float32)            # bords plus nets
         if self.prev is not None:
             m = 0.4 * m + 0.6 * self.prev                                # lissage temporel
@@ -386,8 +389,10 @@ class EdCamera:
         return z, dx, dy, blur
 
 
-def sound_events(lock, brolls, cam, widgets):
+def sound_events(lock, brolls, cam, widgets, minimal=False):
     import sfx
+    if minimal:   # sobre : juste un souffle discret à l'entrée des B-rolls
+        return [(b.start - 0.15, sfx.whoosh(0.4), -27) for b in brolls]
     ev = [(0.0, sfx.impact(), -8)]                                  # hook : boom d'entrée
     for it in lock.items:
         ev.append((max(0.0, it["start"] - 0.12), sfx.whoosh(0.35), -21))
@@ -403,7 +408,7 @@ def sound_events(lock, brolls, cam, widgets):
 
 
 def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st, has_audio=True, broll_spec=(),
-                     widget_spec=()):
+                     widget_spec=(), captions=None):
     import cv2
     import sfx
     import widgets as wmod
@@ -421,7 +426,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
     seg = Segmenter()
     wids = wmod.load(widget_spec, st)
     sfx_path = Path(dst).with_suffix(".sfx.wav")
-    sfx.build_track(sound_events(lock, brolls, cam, wids), total, sfx_path)
+    sfx.build_track(sound_events(lock, brolls, cam, wids, minimal=captions is not None), total, sfx_path)
     print(f"  {len(wids)} widgets, bruitages -> {sfx_path.name}")
     print(f"  {len(cam.bounds) - 2} cuts, {len(brolls)} illustrations, {len(spec)} grands titres, "
           f"{len(cam.joins)} raccord(s) visibles")
@@ -489,6 +494,10 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
             out = base
         for w in wids:
             w.draw(out, t)
+        if captions is not None and captions.active(t):
+            if not lock.active(t):
+                seg.person(base8)
+            captions.draw(out, t, seg.skin, base)
         enc.stdin.write(np.clip(out, 0, 255).astype(np.uint8).tobytes())
         n += 1
         if n % (fps * 5) == 0:

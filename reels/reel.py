@@ -415,7 +415,7 @@ def apply_edl(src, segs, dst, remap):
             if ns is None:
                 continue
             a, b, o = where(w["start"])
-            out.append(dict(w, start=ns, end=round(o + remap(min(w["end"], b)) - remap(a), 3)))
+            out.append(dict(w, _seg=segs.index((a, b)), start=ns, end=round(o + remap(min(w["end"], b)) - remap(a), 3)))
         return sorted(out, key=lambda w: w["start"])   # ordre du montage, pas des rushes
     return dst, tmap, spec, words
 
@@ -461,6 +461,7 @@ def main():
     ap.add_argument("--editorial", help="preset éditorial : grands mots derrière la personne (projets/<nom>/editorial.json)")
     ap.add_argument("--broll", help="illustrations : projets/<nom>/broll.json")
     ap.add_argument("--widgets", help="widgets animés : projets/<nom>/widgets.json")
+    ap.add_argument("--minimal", action="store_true", help="preset minimal : sous-titres typographiques serif")
     ap.add_argument("--edl", help="liste de montage : morceaux à garder, dans l'ordre (projets/<nom>/edl.json)")
     ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
     ap.add_argument("--no-silence-cut", action="store_true")
@@ -514,6 +515,23 @@ def main():
 
     print("3/4 Sous-titres")
     ass = work / "subs.ass"
+    if a.minimal:
+        import editorial
+        import minimal
+        kw = load_keywords(a.keywords)
+        fixed = fix_timings(words)
+        test = lambda w: is_highlight(w, kw)
+        load = lambda f: (edl[0](json.loads(Path(f).read_text())) if edl
+                          else remap_spec(json.loads(Path(f).read_text()), remap))
+        editorial.build_front_ass([], ass, st, test, total := duration(src))
+        caps = minimal.Captions(fixed, test, st)
+        print(f"4/4 Rendu 1080x1920 minimal ({len(caps.groups)} blocs typographiques)")
+        out = ROOT / "output" / f"{name}_minimal.mp4"
+        editorial.render_editorial(src, ass, str(out), fixed, joins, [], [], st, has_audio(src),
+                                   load(a.broll) if a.broll else (), (), caps)
+        print(f"\n✅ {out}  ({duration(out):.1f}s)")
+        return
+
     if a.editorial:
         import editorial
         kw = load_keywords(a.keywords)
