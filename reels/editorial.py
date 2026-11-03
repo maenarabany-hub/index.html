@@ -97,6 +97,7 @@ class Lockups:
             label = render_label(e["label"].upper(), white, box) if e.get("label") else None
             self.items.append({"start": e["start"], "end": e["end"], "y": e.get("y", 560),
                                "words": words, "label": label})
+        self.safe_top = st.get("ed_safe_top", 255)   # la grille Instagram (3:4) coupe 240 px en haut
 
     def active(self, t):
         return any(it["start"] - 0.01 <= t <= it["end"] + 0.2 for it in self.items)
@@ -117,11 +118,13 @@ class Lockups:
             if ws not in locked:
                 h = img.shape[0]
                 y = it["y"] if head_top is None else head_top - 0.05 * h
-                locked[ws] = max(h / 2 + 150, min(y, it["y"] + 200))
+                lab_h = it["label"].shape[0] if it["label"] is not None else 0
+                y_min = self.safe_top + lab_h / 2 + 0.42 * h if lab_h else self.safe_top + h * 0.35
+                locked[ws] = max(y_min, min(y, it["y"] + 260))
             it["cur_y"], it["cur_h"] = locked[ws], img.shape[0]
-            p = ease_out((t - ws) / 0.35)
+            p = 1.0 if it["start"] <= 0.01 and ws <= 0.01 else ease_out((t - ws) / 0.35)  # 1re image : déjà en place
             scale = (1.18 - 0.18 * p) * (1 + 0.03 * (t - ws) / 3)   # arrive en dézoomant + dérive
-            alpha = min(1.0, (t - ws) / 0.15) * out_a
+            alpha = (1.0 if it["start"] <= 0.01 and ws <= 0.01 else min(1.0, (t - ws) / 0.15)) * out_a
             if len(cur) > 1 and t - ws < 0.15:   # l'ancien mot s'efface pendant que le nouveau arrive
                 pws, pimg = cur[-2]
                 py = locked.get(pws, it["cur_y"])
@@ -134,7 +137,7 @@ class Lockups:
             if it["label"] is None or not (it["start"] <= t <= it["end"] + 0.2):
                 continue
             out_a = 1 - ease_out((t - it["end"]) / 0.18) if t > it["end"] else 1.0
-            p = ease_out((t - it["start"]) / 0.3)
+            p = 1.0 if it["start"] <= 0.01 else ease_out((t - it["start"]) / 0.3)
             lab = it["label"]
             # révélation de la boîte de gauche à droite
             vis = max(1, int(lab.shape[1] * p))
@@ -142,7 +145,7 @@ class Lockups:
             if "cur_y" not in it:
                 continue
             x = W / 2 - (lab.shape[1] - vis) / 2
-            over(canvas, cut, x, max(lab.shape[0] / 2 + 120, it["cur_y"] - it["cur_h"] * 0.42), out_a)
+            over(canvas, cut, x, max(lab.shape[0] / 2 + self.safe_top, it["cur_y"] - it["cur_h"] * 0.42), out_a)
 
 
 # ------------------------------------------------------------ sous-titres
@@ -159,7 +162,14 @@ def phrase_groups(words, kw_test, max_words=4, max_gap=0.5):
     return groups
 
 
-def build_front_ass(words, out_ass, st, kw_test, total, cta=None):
+def _toks(s):
+    import unicodedata
+    s = unicodedata.normalize("NFD", s.lower())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return [w for w in re.split(r"[^a-z0-9]+", s) if w]
+
+
+def build_front_ass(words, out_ass, st, kw_test, total, cta=None, lockups=()):
     """Sous-titres fins par groupes, mots révélés un à un ; mots clés en serif italique rose."""
     W, H = st["width"], st["height"]
     pink = motion.ass_c(st["ed_pink"])
@@ -182,6 +192,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ev = []
     for g in phrase_groups(words, kw_test):
         g0 = g[0]["start"]
+        gt = [x for w in g for x in _toks(w["w"])]
+        dup = False
+        for L in lockups:   # le titre à l'écran dit déjà la même chose -> pas de sous-titre
+            if L["start"] - 0.05 <= g0 <= L["end"]:
+                lt = set(_toks(L.get("label", "")) + [x for w in L["words"] for x in _toks(w["text"])])
+                if gt and sum(x in lt for x in gt) / len(gt) >= 0.6:
+                    dup = True
+        if dup:
+            continue
         g1 = max(g[-1]["end"] + 0.15, g0 + 0.3)
         nxt = [w for w in words if w["start"] > g[-1]["start"]]
         if nxt:
@@ -334,8 +353,10 @@ class EdCamera:
             a, b = self.bounds[i], self.bounds[i + 1]
             titled = any(it["start"] < b and it["end"] > a for it in lock.items)
             if source_cuts:   # alternance large / serré (serré plus doux sous un grand titre)
-                tight = (1.06, 0.0, -0.01) if titled else (1.13, 0.0, -0.03)
-                self.framing.append((1.0, 0.0, 0.0) if i % 2 == 0 else tight)
+                if titled:
+                    self.framing.append((1.12, 0.0, -0.40) if i % 2 == 0 else (1.18, 0.0, -0.40))
+                else:
+                    self.framing.append((1.0, 0.0, 0.0) if i % 2 == 0 else (1.13, 0.0, -0.03))
             else:
                 pool = WIDE if titled else TIGHT
                 self.framing.append(pool[i % len(pool)])
@@ -479,3 +500,33 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
     dec.wait()
     if enc.returncode:
         raise SystemExit("Échec de l'encodage")
+
+
+def make_cover(src, t, item, st, out, zoom=1.12):
+    """Couverture 1080x1920 dont le titre reste dans la zone visible de la grille (3:4)."""
+    import cv2
+    W, H = st["width"], st["height"]
+    cap = cv2.VideoCapture(src)
+    cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+    ok, frame = cap.read()
+    if not ok:
+        raise SystemExit("Image introuvable pour la couverture")
+    frame = cv2.resize(frame, (W, H))
+    M = np.float32([[zoom, 0, 0], [0, zoom, 0]])          # zoom ancré en haut, centré en x
+    M[0, 2] = (1 - zoom) * W / 2
+    base8 = cv2.warpAffine(frame, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    seg = Segmenter()
+    for _ in range(3):
+        mask = seg.person(base8)
+    lock = Lockups([dict(item, start=0.0, end=99.0)], st)
+    base = base8.astype(np.float32)
+    behind = base.copy()
+    lock.draw_behind(behind, 1.0, W, top_of_head(mask))
+    img = base * mask + behind * (1 - mask)
+    lock.draw_front(img, 1.0, W)
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    cv2.imwrite(str(out), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    # aperçu de la grille : recadrage 3:4 centré
+    top = (H - W * 4 // 3) // 2
+    cv2.imwrite(str(out).replace(".jpg", "_grille.jpg"), img[top:top + W * 4 // 3])
+    return out

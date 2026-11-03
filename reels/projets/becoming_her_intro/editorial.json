@@ -1,16 +1,20 @@
 [
  {
-  "label": "Tout le monde me dit",
-  "start": 1.6,
+  "label": "Tout le monde me dit de",
+  "start": 0.0,
   "end": 4.9,
   "words": [
    {
     "text": "choisir",
-    "start": 1.6
+    "start": 0.0
+   },
+   {
+    "text": "UN truc",
+    "start": 2.3
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Moi c'est",
@@ -23,7 +27,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Bienvenue dans",
@@ -61,7 +65,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "01 · Le matin",
@@ -78,7 +82,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "02 · L'après-midi",
@@ -95,7 +99,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "03 · Le soir",
@@ -116,7 +120,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Et entre tout ça",
@@ -133,7 +137,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Et clairement",
@@ -146,7 +150,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Pas une vie parfaite",
@@ -159,7 +163,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Pour l'instant",
@@ -172,7 +176,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Mais franchement",
@@ -185,7 +189,7 @@
    }
   ],
   "y": 400,
-  "size": 380
+  "size": 330
  },
  {
   "label": "Dis-moi",

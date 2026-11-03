@@ -443,11 +443,12 @@ def main():
         kw = load_keywords(a.keywords)
         fixed = fix_timings(words)
         test = lambda w: is_highlight(w, kw)
-        editorial.build_front_ass(fixed, ass, st, test, total := duration(src))
+        ed_spec = remap_spec(json.loads(Path(a.editorial).read_text()), remap)
+        editorial.build_front_ass(fixed, ass, st, test, total := duration(src), lockups=ed_spec)
         print("4/4 Rendu 1080x1920 éditorial")
         out = ROOT / "output" / f"{name}_editorial.mp4"
         editorial.render_editorial(src, ass, str(out), fixed, joins, [w["start"] for w in fixed if test(w)],
-                                   remap_spec(json.loads(Path(a.editorial).read_text()), remap), st, has_audio(src),
+                                   ed_spec, st, has_audio(src),
                                    remap_spec(json.loads(Path(a.broll).read_text()), remap) if a.broll else (),
                                    remap_spec(json.loads(Path(a.widgets).read_text()), remap) if a.widgets else ())
         print(f"\n✅ {out}  ({duration(out):.1f}s)")
