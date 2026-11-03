@@ -19,5 +19,9 @@
   "silence_padding": 0.08,
   "whisper_model": "small",
   "language": "fr",
-  "strip_punctuation": true
+  "strip_punctuation": true,
+  "ed_pink": "#E7ABAF",
+  "ed_box": "#5A1419",
+  "ed_sub_y": 1200,
+  "handle": "@maenarbny"
 }
