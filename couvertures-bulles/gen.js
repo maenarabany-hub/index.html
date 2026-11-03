@@ -15,19 +15,19 @@ const column=`<svg viewBox="0 0 200 200"><circle cx="150" cy="44" r="22" fill="$
 const lunettes=`<svg viewBox="0 0 200 200"><path d="M16 92 H184" ${S}/><path d="M24 92 H90 C90 128 76 146 56 146 C34 146 24 126 24 92Z" fill="${R}"/><path d="M110 92 H176 C176 126 166 146 144 146 C124 146 110 128 110 92Z" fill="${R}"/><path d="M90 98 C96 90 104 90 110 98" ${S} stroke-width="5"/><path d="M150 30 l5 14 14 5 -14 5 -5 14 -5 -14 -14 -5 14 -5Z" fill="${R}"/></svg>`;
 // [fichier, mot (Noto Serif), taille, étiquette (CY Grotesk), icône]
 const covers=[
- ['me','Me',300,'Maena',mirror],
- ['collabs','Collabs',175,'Marques & co',collab],
- ['her','Her',300,'Lifestyle',lunettes],
- ['becoming','Becoming',145,'Chaque lundi',cherry],
- ['annecy','Annecy',180,'À croquer',fork],
- ['sport','Sport',300,'Move',dumbbell],
- ['style','Style',300,'Outfits',hanger],
- ['matcha','Matcha',300,'Ma pause',matcha],
- ['danse','Danse',300,'Dance',ballet],
- ['greece','Greece',300,'Voyage',column],
+ ['me','Me',380,'Maena',mirror],
+ ['collabs','Collabs',380,'Brands',collab],
+ ['her','Her',380,'Lifestyle',lunettes],
+ ['becoming','Becoming',380,'Lundi',cherry],
+ ['annecy','Annecy',380,'À croquer',fork],
+ ['sport','Sport',380,'Move',dumbbell],
+ ['style','Style',380,'Outfits',hanger],
+ ['matcha','Matcha',380,'Ma pause',matcha],
+ ['danse','Danse',380,'Dance',ballet],
+ ['greece','Greece',380,'Voyage',column],
 ];
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1920}});
-const t=fs.readFileSync(__dirname+'/template.html','utf8');
+const t0=fs.readFileSync(__dirname+'/template.html','utf8');const t=t0;
 for(const [f,w,s,tag,ic] of covers){await p.setContent(t.replace('__ICON__',ic).replace('__WORD__',w).replace('__SIZE__',s).replace('__TAG__',tag),{waitUntil:'networkidle'});
-await p.evaluate(()=>document.fonts.ready);await p.evaluate(()=>{const w=document.querySelector('.w');let f=parseFloat(w.style.fontSize);while(w.scrollWidth>600&&f>80){f-=4;w.style.fontSize=f+'px';}});await p.screenshot({path:`${__dirname}/${f}.png`});}
+await p.evaluate(()=>document.fonts.ready);await p.evaluate(()=>{const w=document.querySelector('.w');let f=parseFloat(w.style.fontSize);const g=document.querySelector('.tag');let tf=72;while(g.offsetWidth>600&&tf>40){tf-=2;g.style.fontSize=tf+'px';}while(w.scrollWidth>700&&f>80){f-=4;w.style.fontSize=f+'px';}g.style.marginBottom=(-0.09*f)+'px';});await p.screenshot({path:`${__dirname}/${f}.png`});}
 await b.close();})();
