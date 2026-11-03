@@ -527,7 +527,12 @@ def main():
         caps = minimal.Captions(fixed, test, st)
         print(f"4/4 Rendu 1080x1920 minimal ({len(caps.groups)} blocs typographiques)")
         out = ROOT / "output" / f"{name}_minimal.mp4"
-        editorial.render_editorial(src, ass, str(out), fixed, joins, [], [], st, has_audio(src),
+        st = dict(st, clean_grade=st.get("min_clean_grade", True), cam_inout=st.get("min_zoom_inout", True))
+        kt, last = [], -9.0   # zooms doux sur les mots clés, espacés d'au moins 2.5 s
+        for g in caps.groups:
+            if (len(g["key"]) > 1 or test(g["key"][0])) and g["key"][0]["start"] - last > 2.5:
+                kt.append(g["key"][0]["start"]); last = kt[-1]
+        editorial.render_editorial(src, ass, str(out), fixed, joins, kt, [], st, has_audio(src),
                                    load(a.broll) if a.broll else (), (), caps)
         print(f"\n✅ {out}  ({duration(out):.1f}s)")
         return

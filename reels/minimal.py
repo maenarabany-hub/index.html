@@ -117,43 +117,49 @@ class Captions:
         return self.cache[key]
 
     def active(self, t):
-        return any(g["start"] - 0.02 <= t <= g["until"] + 0.15 for g in self.groups)
+        return any(g["start"] - 0.02 <= t <= g["until"] + 0.35 for g in self.groups)
 
     def draw(self, canvas, t, front_mask=None, base=None):
         W = self.W
         for g in self.groups:
-            if not (g["start"] - 0.02 <= t <= g["until"] + 0.15):
+            if not (g["start"] - 0.02 <= t <= g["until"] + 0.35):
                 continue
-            fade = 1 - ease_out((t - g["until"]) / 0.15) if t > g["until"] else 1.0
+            fade = 1 - ease_out((t - g["until"]) / 0.35) if t > g["until"] else 1.0
             big, bpad, size = self._big(g)
             bw = big.shape[1] - 2 * bpad
             bh = big.shape[0] - 2 * bpad
             x0 = (W - bw) / 2                     # bord gauche du grand mot
             yb = self.y
             # 1) petits mots avant, alignés à gauche, au-dessus
-            n_before = sum(1 for w in g["before"] if w["start"] <= t + 0.02)
-            if n_before:
-                im = self._small(g, "before", n_before)
+            if g["before"] and t >= g["before"][0]["start"] - 0.02:
+                im = self._small(g, "before", len(g["before"]))   # la ligne entière, en fondu doux
                 if im:
                     img, pad = im
+                    q = ease_out((t - g["before"][0]["start"]) / 0.45)
                     sh = img.shape[0] - 2 * pad
                     sw = img.shape[1] - 2 * pad
                     cx = min(max(x0 + sw / 2, 60 + sw / 2), W - 60 - sw / 2)   # reste dans l'écran
-                    over(canvas, img, cx, yb - bh / 2 - sh / 2 - 22, fade)
+                    over(canvas, img, cx, yb - bh / 2 - sh / 2 - 22 + 14 * (1 - q), fade * q)
             # 2) grand mot, quand il est prononcé
             ks = g["key"][0]["start"]
             if t >= ks - 0.02:
-                p = ease_out((t - ks) / 0.25)
-                over(canvas, big, W / 2, yb, min(1.0, (t - ks) / 0.08 + 0.2) * fade, 1.06 - 0.06 * p)
+                p = ease_out((t - ks) / 0.5)
+                img = big
+                if p < 0.98:   # arrive flou puis net (mise au point)
+                    import cv2
+                    k = int(1 + 14 * (1 - p)) * 2 + 1
+                    img = cv2.GaussianBlur(big, (k, k), 0)
+                over(canvas, img, W / 2, yb + 18 * (1 - p), p * fade, 1.03 - 0.03 * p)
             # 3) petits mots après, en italique, alignés à droite, en dessous
-            n_after = sum(1 for w in g["after"] if w["start"] <= t + 0.02)
-            if n_after:
-                im = self._small(g, "after", n_after)
+            if g["after"] and t >= g["after"][0]["start"] - 0.02:
+                im = self._small(g, "after", len(g["after"]))
                 if im:
                     img, pad = im
+                    q = ease_out((t - g["after"][0]["start"]) / 0.45)
+                    fade_a = fade * q
                     sh = img.shape[0] - 2 * pad
                     sw = img.shape[1] - 2 * pad
                     cx = min(max(x0 + bw - sw / 2, 60 + sw / 2), W - 60 - sw / 2)
-                    over(canvas, img, cx, yb + bh / 2 + sh / 2 + 26, fade)
+                    over(canvas, img, cx, yb + bh / 2 + sh / 2 + 26 + 14 * (1 - q), fade_a)
         if front_mask is not None and base is not None:   # les mains repassent devant le texte
             canvas[:] = canvas * (1 - front_mask) + base * front_mask

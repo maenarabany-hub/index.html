@@ -337,6 +337,7 @@ class EdCamera:
 
     def __init__(self, words, total, joins, lock, brolls, kw_times, st, source_cuts=()):
         self.smooth = not st.get("ed_cuts", False) and not source_cuts
+        self.inout = st.get("cam_inout", False)
         every = st.get("ed_cut_every", 3.0) if not st.get("ed_cuts", False) else 3.0
         if source_cuts:   # on ne coupe QUE là où le rush est déjà coupé : le saut devient un punch-in voulu
             every = 1e9
@@ -368,7 +369,14 @@ class EdCamera:
         self.drift = st.get("motion_drift", 0.02)
 
     def at(self, t):
-        if self.smooth:   # aucun saut : zoom qui « respire » très lentement
+        if self.inout:   # zoom avant / arrière doux, sens alterné à chaque plan
+            i = max(k for k, b in enumerate(self.bounds[:-1]) if b <= t + 1e-6)
+            a, b = self.bounds[i], self.bounds[i + 1]
+            x = min(max((t - a) / max(b - a, 0.01), 0), 1)
+            s = x * x * (3 - 2 * x)                                   # courbe douce
+            z0, z1 = (1.0, 1.07) if i % 2 == 0 else (1.13, 1.05)
+            z, dx, dy = z0 + (z1 - z0) * s, 0.0, -0.02
+        elif self.smooth:   # aucun saut : zoom qui « respire » très lentement
             z, dx, dy = 1.0 + 0.035 * (0.5 - 0.5 * math.cos(2 * math.pi * t / 14)), 0.0, -0.01
         else:
             i = max(k for k, b in enumerate(self.bounds[:-1]) if b <= t + 1e-6)
@@ -376,7 +384,11 @@ class EdCamera:
             z, dx, dy = self.framing[i]
             z *= 1 + self.drift * (t - a) / max(b - a, 0.01)
         for k in self.kw:
-            if 0 <= t - k < 0.35:
+            if self.inout:   # mot clé : zoom avant doux puis retour (≈1.2 s)
+                if 0 <= t - k < 1.2:
+                    x = (t - k) / 1.2
+                    z *= 1 + 0.035 * math.sin(math.pi * x) ** 2
+            elif 0 <= t - k < 0.35:
                 x = (t - k) / 0.35
                 z *= 1 + 0.025 * math.sin(math.pi * min(x * 2.2, 1)) * (1 - x) ** 0.5
         blur = 0.0
@@ -449,6 +461,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
                 "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-shortest", dst]
     enc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
 
+    cg = CleanGrade(st) if st.get("clean_grade") else None
     size, n, head_top, source = W * H * 3, 0, None, None
     while True:
         buf = dec.stdout.read(size)
@@ -463,6 +476,8 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
         else:
             frame = np.frombuffer(buf, np.uint8).reshape(H, W, 3)
             z, dx, dy, blur = cam.at(t)
+        if cg is not None:
+            frame = cg(np.ascontiguousarray(frame), id(br) if br is not None else "main")
         if source is not br:            # changement de source : on repart à zéro pour le détourage
             seg.prev, head_top, source = None, None, br
         cx, cy = W * (0.5 + dx), H * (0.40 + dy)
@@ -539,3 +554,40 @@ def make_cover(src, t, item, st, out, zoom=1.12):
     top = (H - W * 4 // 3) // 2
     cv2.imwrite(str(out).replace(".jpg", "_grille.jpg"), img[top:top + W * 4 // 3])
     return out
+
+
+class CleanGrade:
+    """Étalonnage « propre » (LAB, par tables de correspondance, rapide) :
+    blancs remontés, noirs posés, contraste doux, dominante rouge-rose réduite, saturation -15 %.
+    Les niveaux sont mesurés une fois par source (vidéo principale, chaque B-roll)."""
+
+    def __init__(self, st):
+        self.st = st
+        self.luts = {}
+
+    def _build(self, frame):
+        import cv2
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        L = lab[:, :, 0]
+        lo, hi = np.percentile(L, 1.0), np.percentile(L, 99.5)
+        x = np.arange(256, dtype=np.float32)
+        y = np.clip((x - lo) / max(hi - lo, 1), 0, 1)            # niveaux
+        y = 0.03 + 0.92 * y                                       # noirs posés, blancs propres
+        y = y + 0.06 * np.sin(np.pi * y) * (y - 0.5) * 2          # S doux
+        Llut = np.clip(y * 255, 0, 255).astype(np.uint8)
+        k_a, k_b = self.st.get("grade_a", 0.82), self.st.get("grade_b", 0.9)
+        shift_a = self.st.get("grade_shift_a", -2.5)              # moins de rouge-rose
+        alut = np.clip((x - 128) * k_a + 128 + shift_a, 0, 255).astype(np.uint8)
+        blut = np.clip((x - 128) * k_b + 128, 0, 255).astype(np.uint8)
+        return Llut, alut, blut
+
+    def __call__(self, frame, key):
+        import cv2
+        if key not in self.luts:
+            self.luts[key] = self._build(frame)
+        Llut, alut, blut = self.luts[key]
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        lab[:, :, 0] = cv2.LUT(lab[:, :, 0], Llut)
+        lab[:, :, 1] = cv2.LUT(lab[:, :, 1], alut)
+        lab[:, :, 2] = cv2.LUT(lab[:, :, 2], blut)
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
