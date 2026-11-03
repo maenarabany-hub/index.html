@@ -7,6 +7,11 @@ const mirror=`<svg viewBox="0 0 200 200"><ellipse cx="100" cy="82" rx="52" ry="6
 const collab=`<svg viewBox="0 0 200 200"><path d="M100 40 l10 30 30 10 -30 10 -10 30 -10 -30 -30 -10 30 -10Z" fill="${R}"/><path d="M152 118 l6 17 17 6 -17 6 -6 17 -6 -17 -17 -6 17 -6Z" fill="${R}"/><path d="M48 128 l5 14 14 5 -14 5 -5 14 -5 -14 -14 -5 14 -5Z" fill="${R}"/><path d="M40 60 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3Z" fill="${R}" opacity=".6"/></svg>`;
 const martini=`<svg viewBox="0 0 200 200"><path d="M40 50 H160 L100 118Z" ${S}/><path d="M100 118 V180 M70 182 H130" ${S}/><circle cx="132" cy="44" r="15" fill="${R}"/><path d="M132 30 C136 18 146 12 154 10" ${S} stroke-width="5"/></svg>`;
 const fork=`<svg viewBox="0 0 200 200"><circle cx="100" cy="110" r="66" ${S}/><circle cx="100" cy="110" r="44" ${S} stroke-width="4" opacity=".6"/><path d="M22 40 V186 M12 40 V72 a10 10 0 0 0 20 0 V40" ${S} stroke-width="6"/><path d="M186 186 V40 C168 50 166 90 174 110 H186" ${S} stroke-width="6"/></svg>`;
+const dumbbell=`<svg viewBox="0 0 200 200"><path d="M50 100 H150" ${S}/><rect x="28" y="62" width="22" height="76" rx="6" fill="${R}"/><rect x="150" y="62" width="22" height="76" rx="6" fill="${R}"/><rect x="10" y="78" width="16" height="44" rx="5" fill="${R}"/><rect x="174" y="78" width="16" height="44" rx="5" fill="${R}"/></svg>`;
+const hanger=`<svg viewBox="0 0 200 200"><path d="M86 52 a14 14 0 1 1 22 12 c-6 4 -8 8 -8 16 L176 140 c6 4 4 12 -4 12 H28 c-8 0 -10 -8 -4 -12 L100 80" ${S}/></svg>`;
+const matcha=`<svg viewBox="0 0 200 200"><path d="M24 96 H176 C176 146 144 176 100 176 C56 176 24 146 24 96Z" ${S}/><path d="M36 96 C70 84 130 84 164 96Z" fill="${R}" opacity=".85"/><path d="M78 76 C68 62 88 50 78 34 M104 74 C94 58 116 46 104 26 M130 76 C120 62 140 50 130 34" ${S} stroke-width="5" opacity=".8"/><path d="M148 140 C160 128 178 128 186 120 C184 136 168 150 148 140Z" fill="${R}"/></svg>`;
+const ballet=`<svg viewBox="0 0 200 200"><circle cx="104" cy="34" r="16" fill="${R}"/><path d="M100 56 L94 112 M96 66 C120 54 140 36 150 14 M96 70 C76 80 58 84 38 76 M94 112 L60 186 M94 112 C120 118 150 112 176 96" ${S}/><path d="M80 118 C88 104 104 104 112 118" ${S} stroke-width="5"/></svg>`;
+const column=`<svg viewBox="0 0 200 200"><circle cx="150" cy="44" r="22" fill="${R}"/><path d="M40 70 H130 M46 82 H124 M56 82 V164 M76 82 V164 M94 82 V164 M114 82 V164 M44 164 H126 M36 180 H134" ${S}/><path d="M36 70 C40 60 50 60 54 66 M134 70 C130 60 120 60 116 66" ${S} stroke-width="5"/></svg>`;
 // [fichier, mot (Noto Serif), taille, étiquette (CY Grotesk), icône]
 const covers=[
  ['me','Me',300,'Maena',mirror],
@@ -14,9 +19,14 @@ const covers=[
  ['her','Her',300,'Soirées',martini],
  ['becoming','Becoming',145,'Chaque lundi',cherry],
  ['annecy','Annecy',180,'À croquer',fork],
+ ['sport','Sport',300,'Move',dumbbell],
+ ['style','Style',300,'Outfits',hanger],
+ ['matcha','Matcha',300,'Ma pause',matcha],
+ ['danse','Danse',300,'Dance',ballet],
+ ['greece','Greece',300,'Voyage',column],
 ];
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1920}});
 const t=fs.readFileSync(__dirname+'/template.html','utf8');
 for(const [f,w,s,tag,ic] of covers){await p.setContent(t.replace('__ICON__',ic).replace('__WORD__',w).replace('__SIZE__',s).replace('__TAG__',tag),{waitUntil:'networkidle'});
-await p.evaluate(()=>document.fonts.ready);await p.screenshot({path:`${__dirname}/${f}.png`});}
+await p.evaluate(()=>document.fonts.ready);await p.evaluate(()=>{const w=document.querySelector('.w');let f=parseFloat(w.style.fontSize);while(w.scrollWidth>600&&f>80){f-=4;w.style.fontSize=f+'px';}});await p.screenshot({path:`${__dirname}/${f}.png`});}
 await b.close();})();
