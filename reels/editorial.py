@@ -121,7 +121,12 @@ class Lockups:
             it["cur_y"], it["cur_h"] = locked[ws], img.shape[0]
             p = ease_out((t - ws) / 0.35)
             scale = (1.18 - 0.18 * p) * (1 + 0.03 * (t - ws) / 3)   # arrive en dézoomant + dérive
-            alpha = min(1.0, (t - ws) / 0.12) * out_a
+            alpha = min(1.0, (t - ws) / 0.15) * out_a
+            if len(cur) > 1 and t - ws < 0.15:   # l'ancien mot s'efface pendant que le nouveau arrive
+                pws, pimg = cur[-2]
+                py = locked.get(pws, it["cur_y"])
+                q = (t - ws) / 0.15
+                over(canvas, pimg, W / 2, py - 20 * q, (1 - q) * out_a, (1 + 0.03 * (ws - pws) / 3) * (1 - 0.06 * q))
             over(canvas, img, W / 2, it["cur_y"] + 30 * (1 - p), alpha, scale)
 
     def draw_front(self, canvas, t, W):
@@ -218,9 +223,9 @@ class Segmenter:
         m = 1.0 - r.confidence_masks[0].numpy_view().reshape(small.shape[:2])
         m = np.clip((m - 0.25) / 0.5, 0, 1).astype(np.float32)            # bords plus nets
         if self.prev is not None:
-            m = 0.55 * m + 0.45 * self.prev                                # lissage temporel
+            m = 0.4 * m + 0.6 * self.prev                                # lissage temporel
         self.prev = m
-        m = cv2.GaussianBlur(m, (5, 5), 0)
+        m = cv2.GaussianBlur(m, (7, 7), 0)
         return cv2.resize(m, (bgr.shape[1], bgr.shape[0]), interpolation=cv2.INTER_LINEAR)[:, :, None]
 
 
@@ -292,7 +297,8 @@ class EdCamera:
     plans larges pendant les grands titres, rien pendant les illustrations."""
 
     def __init__(self, words, total, joins, lock, brolls, kw_times, st):
-        every = st.get("ed_cut_every", 3.0)
+        self.smooth = not st.get("ed_cuts", False)
+        every = st.get("ed_cut_every", 3.0) if not self.smooth else 1e9
         gaps = [(words[i]["end"] + words[i + 1]["start"]) / 2 for i in range(len(words) - 1)]
         strong = [g for i, g in enumerate(gaps) if re.search(r"[.,!?;:]$", words[i]["w"])]
         busy = [(b.start - 0.5, b.end + 0.5) for b in brolls]
@@ -314,10 +320,13 @@ class EdCamera:
         self.drift = st.get("motion_drift", 0.02)
 
     def at(self, t):
-        i = max(k for k, b in enumerate(self.bounds[:-1]) if b <= t + 1e-6)
-        a, b = self.bounds[i], self.bounds[i + 1]
-        z, dx, dy = self.framing[i]
-        z *= 1 + self.drift * (t - a) / max(b - a, 0.01)
+        if self.smooth:   # aucun saut : zoom qui « respire » très lentement
+            z, dx, dy = 1.0 + 0.035 * (0.5 - 0.5 * math.cos(2 * math.pi * t / 14)), 0.0, -0.01
+        else:
+            i = max(k for k, b in enumerate(self.bounds[:-1]) if b <= t + 1e-6)
+            a, b = self.bounds[i], self.bounds[i + 1]
+            z, dx, dy = self.framing[i]
+            z *= 1 + self.drift * (t - a) / max(b - a, 0.01)
         for k in self.kw:
             if 0 <= t - k < 0.35:
                 x = (t - k) / 0.35

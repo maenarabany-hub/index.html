@@ -323,25 +323,46 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 # ----------------------------------------------------------- 0. assemblage
 def concat_rushes(rushes, dst, st):
+    """Assemble les rushes avec un fondu enchaîné très court (image + son) :
+    pas de creux dans la voix au raccord. Renvoie (fichier, raccords, ancien->nouveau temps)."""
     W, H, fps = st["width"], st["height"], st["fps"]
+    ov = st.get("join_crossfade", 0.06)
+    durs = [duration(r) for r in rushes]
     parts = "".join(
         f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={fps},"
-        f"format=yuv420p[v{i}];[{i}:a]aresample=48000,aformat=channel_layouts=stereo,"
-        f"afade=t=in:d=0.02,afade=t=out:st={duration(rushes[i]) - 0.04:.3f}:d=0.04[a{i}];"
+        f"format=yuv420p,settb=AVTB[v{i}];[{i}:a]aresample=48000,aformat=channel_layouts=stereo,"
+        f"apad=whole_dur={durs[i]:.3f},atrim=0:{durs[i]:.3f}[a{i}];"   # son = durée exacte de l'image
         for i in range(len(rushes)))
-    labels = "".join(f"[v{i}][a{i}]" for i in range(len(rushes)))
+    fc, vlast, alast, acc = parts, "[v0]", "[a0]", durs[0]
+    for i in range(1, len(rushes)):
+        fc += (f"{vlast}[v{i}]xfade=transition=fade:duration={ov}:offset={acc - ov:.3f}[vx{i}];"
+               f"{alast}[a{i}]acrossfade=d={ov}:c1=tri:c2=tri[ax{i}];")
+        vlast, alast = f"[vx{i}]", f"[ax{i}]"
+        acc += durs[i] - ov
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
     for r in rushes:
         cmd += ["-i", r]
-    cmd += ["-filter_complex", parts + labels + f"concat=n={len(rushes)}:v=1:a=1[v][a]",
-            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15",
-            "-c:a", "aac", "-b:a", "256k", dst]
+    cmd += ["-filter_complex", fc.rstrip(";"), "-map", vlast, "-map", alast, "-c:v", "libx264",
+            "-preset", "veryfast", "-crf", "15", "-c:a", "aac", "-b:a", "256k", dst]
     run(cmd)
-    joins, t = [], 0.0
-    for r in rushes[:-1]:
-        t += duration(r)
-        joins.append(round(t, 3))
-    return dst, joins
+    old, joins, t = [], [], 0.0
+    for k, d in enumerate(durs[:-1]):
+        t += d
+        old.append(t)
+        joins.append(round(t - ov * (k + 1), 3))
+
+    def remap(x):  # temps sur l'ancien assemblage bout à bout -> nouveau
+        return round(x - ov * sum(1 for o in old if o <= x), 3)
+    return dst, joins, remap
+
+
+def remap_spec(obj, remap, keys=("start", "end", "type_end")):
+    if isinstance(obj, list):
+        return [remap_spec(o, remap, keys) for o in obj]
+    if isinstance(obj, dict):
+        return {k: (remap(v) if k in keys and isinstance(v, (int, float)) else remap_spec(v, remap, keys))
+                for k, v in obj.items()}
+    return obj
 
 
 # ---------------------------------------------------------------- 4. rendu
@@ -387,10 +408,10 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     (ROOT / "output").mkdir(exist_ok=True)
 
-    src, joins = rushes[0], []
+    src, joins, remap = rushes[0], [], (lambda x: x)
     if len(rushes) > 1:
         print(f"0/4 Assemblage de {len(rushes)} rushes")
-        src, joins = concat_rushes(rushes, str(work / "concat.mp4"), st)
+        src, joins, remap = concat_rushes(rushes, str(work / "concat.mp4"), st)
 
     if st["remove_silences"] and not a.no_silence_cut and has_audio(src):
         print("1/4 Suppression des silences")
@@ -403,14 +424,17 @@ def main():
 
     if a.words:
         print(f"2/4 Transcription : {a.words}")
-        words = json.loads(Path(a.words).read_text())
+        words = remap_spec(json.loads(Path(a.words).read_text()), remap)  # timings faits bout à bout
     else:
         print("2/4 Transcription mot par mot")
         words = transcribe(src, work / "words_raw.json", st)
         if a.script:
             words = align_to_script(words, Path(a.script).read_text())
             print("  Texte calé sur le script")
-        (work / "words.json").write_text(json.dumps(words, ensure_ascii=False, indent=1))
+        # words.json est enregistré en temps « bout à bout » (comme editorial/broll/widgets.json)
+        ov = st.get("join_crossfade", 0.06)
+        unmap = lambda x: round(x + ov * sum(1 for j in joins if j <= x), 3)
+        (work / "words.json").write_text(json.dumps(remap_spec(words, unmap), ensure_ascii=False, indent=1))
 
     print("3/4 Sous-titres")
     ass = work / "subs.ass"
@@ -423,9 +447,9 @@ def main():
         print("4/4 Rendu 1080x1920 éditorial")
         out = ROOT / "output" / f"{name}_editorial.mp4"
         editorial.render_editorial(src, ass, str(out), fixed, joins, [w["start"] for w in fixed if test(w)],
-                                   json.loads(Path(a.editorial).read_text()), st, has_audio(src),
-                                   json.loads(Path(a.broll).read_text()) if a.broll else (),
-                                   json.loads(Path(a.widgets).read_text()) if a.widgets else ())
+                                   remap_spec(json.loads(Path(a.editorial).read_text()), remap), st, has_audio(src),
+                                   remap_spec(json.loads(Path(a.broll).read_text()), remap) if a.broll else (),
+                                   remap_spec(json.loads(Path(a.widgets).read_text()), remap) if a.widgets else ())
         print(f"\n✅ {out}  ({duration(out):.1f}s)")
         return
 
