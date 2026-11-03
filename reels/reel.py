@@ -254,9 +254,31 @@ def is_highlight(word, kw):
     return norm(word["w"]) in kw or bool(re.search(r"\d|%|€|\$", word["w"]))
 
 
-def build_ass(words, out_ass, st, keywords=None):
+def fix_timings(words, min_dur=0.12):
+    """Évite les mots qui clignotent : départs strictement croissants, durée mini."""
+    words = [dict(w) for w in words]
+    i = 0
+    while i < len(words):
+        j = i
+        while j + 1 < len(words) and words[j + 1]["start"] - words[i]["start"] < min_dur * (j + 1 - i):
+            j += 1
+        if j > i:  # plusieurs mots collés : on les étale jusqu'au mot suivant
+            t0 = words[i]["start"]
+            t1 = max(words[j + 1]["start"] if j + 1 < len(words) else words[j]["end"], t0 + min_dur * (j - i + 1))
+            step = (t1 - t0) / (j - i + 1)
+            for k in range(i, j + 1):
+                words[k]["start"] = round(t0 + step * (k - i), 3)
+                words[k]["end"] = max(words[k]["end"], round(words[k]["start"] + step, 3))
+        i = j + 1
+    return words
+
+
+def build_ass(words, out_ass, st, keywords=None, overlays=None, total=None):
     kw = load_keywords(keywords)
+    words = fix_timings(words)
     white, pink = ass_color(st["color_text"]), ass_color(st["color_highlight"])
+    import motion
+    extra_styles = "\n".join(motion.overlay_styles(st)) if overlays is not None else ""
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {st['width']}
@@ -267,6 +289,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Word,{st['font']},{st['font_size']},{white},{white},&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,{st['outline']},{st['shadow']},2,60,60,{st['subtitle_margin_bottom']},1
+{extra_styles}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -283,12 +306,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             text = re.sub(r"[.,;:…—]+$", "", text).strip() or text
         text = text.replace("{", "(").replace("}", ")")
         tags = ""
-        if is_highlight(w, kw):
+        hl = is_highlight(w, kw)
+        if hl:
             tags += f"\\c{pink}"
-        if st["pop_animation"]:
-            tags += "\\fscx85\\fscy85\\t(0,90,\\fscx100\\fscy100)"
-        lines.append(f"Dialogue: 0,{ts(start)},{ts(end)},Word,,0,0,0,,{{{tags}}}{text}")
+        if st["pop_animation"] and hl:       # mot clé : plus gros, rebond + petite rotation
+            tags += ("\\frz-5\\fscx70\\fscy70\\t(0,90,\\fscx132\\fscy132\\frz2)"
+                     "\\t(90,180,\\fscx118\\fscy118\\frz0)")
+        elif st["pop_animation"]:            # mot normal : pop rapide
+            tags += "\\fscx75\\fscy75\\t(0,70,\\fscx108\\fscy108)\\t(70,130,\\fscx100\\fscy100)"
+        lines.append(f"Dialogue: 1,{ts(start)},{ts(end)},Word,,0,0,0,,{{{tags}}}{text}")
+    if overlays is not None:
+        lines += motion.overlay_events(overlays, total or words[-1]["end"] + 0.5, st)
     Path(out_ass).write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+    return [w["start"] for w in words if is_highlight(w, kw)]
 
 
 # ----------------------------------------------------------- 0. assemblage
@@ -296,7 +326,8 @@ def concat_rushes(rushes, dst, st):
     W, H, fps = st["width"], st["height"], st["fps"]
     parts = "".join(
         f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={fps},"
-        f"format=yuv420p[v{i}];[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}];"
+        f"format=yuv420p[v{i}];[{i}:a]aresample=48000,aformat=channel_layouts=stereo,"
+        f"afade=t=in:d=0.02,afade=t=out:st={duration(rushes[i]) - 0.04:.3f}:d=0.04[a{i}];"
         for i in range(len(rushes)))
     labels = "".join(f"[v{i}][a{i}]" for i in range(len(rushes)))
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
@@ -306,7 +337,11 @@ def concat_rushes(rushes, dst, st):
             "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15",
             "-c:a", "aac", "-b:a", "256k", dst]
     run(cmd)
-    return dst
+    joins, t = [], 0.0
+    for r in rushes[:-1]:
+        t += duration(r)
+        joins.append(round(t, 3))
+    return dst, joins
 
 
 # ---------------------------------------------------------------- 4. rendu
@@ -337,6 +372,8 @@ def main():
     ap.add_argument("--script", help="texte du script : corrige l'orthographe de la transcription")
     ap.add_argument("--keywords", help="mots clés en couleur propres à cette vidéo (un par ligne)")
     ap.add_argument("--words", help="words.json existant (saute la transcription)")
+    ap.add_argument("--motion", help="calques motion design (projets/<nom>/motion.json)")
+    ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
     ap.add_argument("--no-silence-cut", action="store_true")
     a = ap.parse_args()
 
@@ -347,14 +384,17 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     (ROOT / "output").mkdir(exist_ok=True)
 
-    src = rushes[0]
+    src, joins = rushes[0], []
     if len(rushes) > 1:
         print(f"0/4 Assemblage de {len(rushes)} rushes")
-        src = concat_rushes(rushes, str(work / "concat.mp4"), st)
+        src, joins = concat_rushes(rushes, str(work / "concat.mp4"), st)
 
     if st["remove_silences"] and not a.no_silence_cut and has_audio(src):
         print("1/4 Suppression des silences")
-        src = cut_silences(src, str(work / "tight.mp4"), st)
+        tight = cut_silences(src, str(work / "tight.mp4"), st)
+        if tight != src:
+            joins = []  # les raccords ont bougé : pas de transition
+        src = tight
     else:
         print("1/4 Suppression des silences : ignorée")
 
@@ -371,11 +411,21 @@ def main():
 
     print("3/4 Sous-titres")
     ass = work / "subs.ass"
-    build_ass(words, ass, st, a.keywords)
+    use_motion = st.get("motion", True) and not a.simple
+    total = duration(src)
+    if use_motion:
+        import motion
+        overlays = motion.load_spec(a.motion)
+        kw_times = build_ass(words, ass, st, a.keywords, overlays, total)
+    else:
+        build_ass(words, ass, st, a.keywords)
 
-    print("4/4 Rendu 1080x1920")
+    print("4/4 Rendu 1080x1920" + (" + motion design" if use_motion else ""))
     out = ROOT / "output" / f"{name}_reel.mp4"
-    render(src, ass, str(out), st)
+    if use_motion:
+        motion.render_motion(src, ass, str(out), fix_timings(words), joins, kw_times, st, has_audio(src))
+    else:
+        render(src, ass, str(out), st)
     print(f"\n✅ {out}  ({duration(out):.1f}s)")
 
 

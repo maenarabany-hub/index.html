@@ -1,0 +1,122 @@
+[
+ {
+  "text": "CHOISIR UN SEUL TRUC ?",
+  "start": 1.92,
+  "end": 4.98,
+  "style": "Title",
+  "y": 300,
+  "anim": "drop"
+ },
+ {
+  "text": "MAENA",
+  "start": 6.62,
+  "end": 7.7,
+  "style": "Big",
+  "y": 250,
+  "anim": "slam"
+ },
+ {
+  "text": "BECOMING HER",
+  "start": 7.72,
+  "end": 12.58,
+  "style": "Title",
+  "y": 300,
+  "anim": "drop"
+ },
+ {
+  "text": "SPORT",
+  "start": 13.64,
+  "end": 19.1,
+  "style": "Chip",
+  "y": 280,
+  "anim": "slide"
+ },
+ {
+  "text": "DANSE URBAINE",
+  "start": 14.18,
+  "end": 19.1,
+  "style": "Chip",
+  "y": 385,
+  "anim": "slide"
+ },
+ {
+  "text": "MANNEQUINAT",
+  "start": 16.0,
+  "end": 19.1,
+  "style": "Chip",
+  "y": 490,
+  "anim": "slide"
+ },
+ {
+  "text": "MATCHAS (TROP CHERS)",
+  "start": 16.78,
+  "end": 19.1,
+  "style": "Chip",
+  "y": 595,
+  "anim": "slide"
+ },
+ {
+  "text": "UNE JOURNÉE TYPE ?",
+  "start": 19.1,
+  "end": 21.68,
+  "style": "Title",
+  "y": 300,
+  "anim": "drop"
+ },
+ {
+  "text": "01 · LE MATIN",
+  "start": 21.68,
+  "end": 23.48,
+  "style": "Chip",
+  "y": 300,
+  "anim": "slide"
+ },
+ {
+  "text": "02 · L'APRÈS-MIDI",
+  "start": 23.48,
+  "end": 27.44,
+  "style": "Chip",
+  "y": 300,
+  "anim": "slide"
+ },
+ {
+  "text": "03 · LE SOIR",
+  "start": 27.44,
+  "end": 31.4,
+  "style": "Chip",
+  "y": 300,
+  "anim": "slide"
+ },
+ {
+  "text": "+ 3H À FIXER LE PLAFOND",
+  "start": 31.4,
+  "end": 35.34,
+  "style": "Title",
+  "y": 300,
+  "anim": "drop"
+ },
+ {
+  "text": "PAS ENVIE DE CHOISIR",
+  "start": 37.86,
+  "end": 40.0,
+  "style": "Title",
+  "y": 300,
+  "anim": "drop"
+ },
+ {
+  "text": "JUSTE MON UNIVERS",
+  "start": 41.54,
+  "end": 44.02,
+  "style": "Chip",
+  "y": 300,
+  "anim": "slide"
+ },
+ {
+  "text": "DIS-MOI EN COMMENTAIRE ↓",
+  "start": 47.52,
+  "end": 51.9,
+  "style": "Title",
+  "y": 300,
+  "anim": "pulse"
+ }
+]
