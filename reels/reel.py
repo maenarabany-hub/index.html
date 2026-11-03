@@ -10,6 +10,7 @@
 
 Usage :
   python3 reel.py rush/mon_rush.mp4
+  python3 reel.py rush/r1.mp4 rush/r2.mp4 rush/r3.mp4 --name intro --script scripts/intro.txt
   python3 reel.py rush/mon_rush.mp4 --words work/mon_rush/words.json   # transcription déjà corrigée
   python3 reel.py rush/mon_rush.mp4 --no-silence-cut
 """
@@ -85,24 +86,143 @@ def cut_silences(src, dst, st):
 
 
 # ---------------------------------------------------------- 2. transcription
+def load_audio(path):
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ac", "1", "-ar", "16000",
+                          "-f", "f32le", "-"], capture_output=True, check=True).stdout
+    return np.frombuffer(raw, dtype=np.float32)
+
+
+def merge_tokens(words):
+    """Recolle les morceaux de whisper : J + 'ai -> J'ai, laisse + -moi -> laisse-moi."""
+    out = []
+    for w in words:
+        if out and (w["w"][:1] in "'’-" or w["w"] in "?!:;" or out[-1]["w"][-1:] in "'’"):
+            out[-1]["w"] += w["w"] if w["w"] not in "?!:;" else " " + w["w"]
+            out[-1]["end"] = w["end"]
+        else:
+            out.append(dict(w))
+    return out
+
+
 def transcribe(src, out_json, st):
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         sys.exit("faster-whisper n'est pas installé : pip install faster-whisper")
-    print(f"  Modèle whisper '{st['whisper_model']}' (CPU int8)…")
-    model = WhisperModel(st["whisper_model"], device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(str(src), language=st["language"], word_timestamps=True,
-                                   vad_filter=True)
+    model_name = st["whisper_model"]
+    local = ROOT / "models" / f"whisper-{model_name}"
+    if local.exists():
+        model_name = str(local)
+    print(f"  Modèle whisper '{model_name}' (CPU int8)…")
+    model = WhisperModel(model_name, device="cpu", compute_type="int8")
+    segments, _ = model.transcribe(load_audio(src), language=st["language"], word_timestamps=True,
+                                   beam_size=5)
     words = []
     for seg in segments:
         for w in seg.words:
             t = w.word.strip()
             if t:
                 words.append({"w": t, "start": round(w.start, 3), "end": round(w.end, 3)})
-                print(f"    {w.start:6.2f}  {t}")
+    words = merge_tokens(words)
+    for w in words:
+        print(f"    {w['start']:6.2f}  {w['w']}")
     Path(out_json).write_text(json.dumps(words, ensure_ascii=False, indent=1))
     return words
+
+
+def norm(t):
+    import unicodedata
+    t = unicodedata.normalize("NFD", t.lower())
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in t if unicodedata.category(c) != "Mn"))
+
+
+def script_tokens(text):
+    """Découpe le script en mots ; la ponctuation isolée (? ! :) se colle au mot d'avant, les tirets sautent."""
+    toks = []
+    for t in text.split():
+        if not norm(t):
+            if toks and t in "?!:;":
+                toks[-1] += " " + t
+            continue
+        toks.append(t)
+    return toks
+
+
+def align_to_script(words, script_text):
+    """Remplace le texte de whisper par celui du script en gardant les timings.
+    Alignement mot à mot tolérant (Needleman-Wunsch + similarité de caractères) :
+    - mots mal entendus (Maïna -> Maena) : texte du script, timing de whisper
+    - impros (dites mais absentes du script) : gardées telles que whisper les a entendues
+    - mots du script non prononcés : ignorés"""
+    from difflib import SequenceMatcher
+    script = script_tokens(script_text)
+    A, B = [norm(w) for w in script], [norm(w["w"]) for w in words]
+    n, m = len(A), len(B)
+
+    def sim(x, y):
+        return 1.0 if x == y else SequenceMatcher(None, x, y).ratio()
+
+    GAP = -0.5
+    S = [[0.0] * (m + 1) for _ in range(n + 1)]
+    T = [[0] * (m + 1) for _ in range(n + 1)]  # 0 diag, 1 up (script seul), 2 left (whisper seul)
+    for i in range(1, n + 1):
+        S[i][0], T[i][0] = i * GAP, 1
+    for j in range(1, m + 1):
+        S[0][j], T[0][j] = j * GAP, 2
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            r = sim(A[i - 1], B[j - 1])
+            d = S[i - 1][j - 1] + (2 * r if r >= 0.5 else -1.0)
+            u, l = S[i - 1][j] + GAP, S[i][j - 1] + GAP
+            S[i][j], T[i][j] = max((d, 0), (u, 1), (l, 2))
+    pairs, i, j = [], n, m
+    while i or j:
+        t = T[i][j]
+        if t == 0:
+            pairs.append((i - 1, j - 1)); i -= 1; j -= 1
+        elif t == 1:
+            pairs.append((i - 1, None)); i -= 1
+        else:
+            pairs.append((None, j - 1)); j -= 1
+    pairs.reverse()
+
+    # Regroupe entre "ancres" (mots identiques ou très proches) et répartit le temps.
+    out, si, wj = [], [], []
+
+    def flush():
+        if wj and si:
+            t0, t1 = words[wj[0]]["start"], words[wj[-1]]["end"]
+            total = sum(len(A[k]) for k in si)
+            t = t0
+            for k in si:
+                d = (t1 - t0) * len(A[k]) / total
+                out.append({"w": script[k], "start": round(t, 3), "end": round(t + d, 3), "_s": k})
+                t += d
+        elif wj:
+            out.extend(dict(words[k], impro=True) for k in wj)
+        si.clear(); wj.clear()
+
+    for a, b in pairs:
+        if a is not None and b is not None and sim(A[a], B[b]) >= 0.8:
+            flush()
+            out.append({"w": script[a], "start": words[b]["start"], "end": words[b]["end"], "_s": a})
+        else:
+            if a is not None:
+                si.append(a)
+            if b is not None:
+                wj.append(b)
+    flush()
+
+    # Majuscule de début de phrase du script qui n'en est plus une à l'oral
+    for k, w in enumerate(out):
+        s_idx = w.pop("_s", None)
+        if k and s_idx and script[s_idx - 1][-1:] in ".?!" and out[k - 1]["w"][-1:] not in ".?!" \
+                and w["w"][:1].isupper() and not w["w"].isupper():
+            w["w"] = w["w"][0].lower() + w["w"][1:]
+        elif k and out[k - 1]["w"][-1:] in ".?!" and w["w"][:1].islower():
+            w["w"] = w["w"][0].upper() + w["w"][1:]
+    return out
 
 
 # ----------------------------------------------------------- 3. sous-titres
@@ -116,26 +236,26 @@ def ts(t):
     return f"{int(t // 3600)}:{int(t % 3600 // 60):02d}:{t % 60:05.2f}"
 
 
-def load_keywords():
+def load_keywords(extra=None):
     kw = set()
-    f = ROOT / "keywords.txt"
-    if f.exists():
+    for f in [ROOT / "keywords.txt"] + ([Path(extra)] if extra else []):
+        if not f.exists():
+            continue
         for line in f.read_text().splitlines():
             line = line.strip()
             if line and not line.startswith("#"):
-                kw.add(line.lower())
+                kw.add(norm(line))
     return kw
 
 
 def is_highlight(word, kw):
     if word.get("hl") is not None:
         return bool(word["hl"])
-    clean = re.sub(r"[^\w%€$'-]", "", word["w"].lower())
-    return clean in kw or bool(re.search(r"\d|%|€|\$", clean))
+    return norm(word["w"]) in kw or bool(re.search(r"\d|%|€|\$", word["w"]))
 
 
-def build_ass(words, out_ass, st):
-    kw = load_keywords()
+def build_ass(words, out_ass, st, keywords=None):
+    kw = load_keywords(keywords)
     white, pink = ass_color(st["color_text"]), ass_color(st["color_highlight"])
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -159,6 +279,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if end <= start:
             end = start + 0.08
         text = w["w"].upper() if st["uppercase"] else w["w"]
+        if st.get("strip_punctuation"):
+            text = re.sub(r"[.,;:…—]+$", "", text).strip() or text
         text = text.replace("{", "(").replace("}", ")")
         tags = ""
         if is_highlight(w, kw):
@@ -167,6 +289,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             tags += "\\fscx85\\fscy85\\t(0,90,\\fscx100\\fscy100)"
         lines.append(f"Dialogue: 0,{ts(start)},{ts(end)},Word,,0,0,0,,{{{tags}}}{text}")
     Path(out_ass).write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ----------------------------------------------------------- 0. assemblage
+def concat_rushes(rushes, dst, st):
+    W, H, fps = st["width"], st["height"], st["fps"]
+    parts = "".join(
+        f"[{i}:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={fps},"
+        f"format=yuv420p[v{i}];[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}];"
+        for i in range(len(rushes)))
+    labels = "".join(f"[v{i}][a{i}]" for i in range(len(rushes)))
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
+    for r in rushes:
+        cmd += ["-i", r]
+    cmd += ["-filter_complex", parts + labels + f"concat=n={len(rushes)}:v=1:a=1[v][a]",
+            "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15",
+            "-c:a", "aac", "-b:a", "256k", dst]
+    run(cmd)
+    return dst
 
 
 # ---------------------------------------------------------------- 4. rendu
@@ -192,36 +332,46 @@ def render(src, ass, dst, st):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("rush")
+    ap.add_argument("rush", nargs="+", help="un ou plusieurs rushes (montés dans l'ordre)")
+    ap.add_argument("--name", help="nom du projet (défaut : nom du premier rush)")
+    ap.add_argument("--script", help="texte du script : corrige l'orthographe de la transcription")
+    ap.add_argument("--keywords", help="mots clés en couleur propres à cette vidéo (un par ligne)")
     ap.add_argument("--words", help="words.json existant (saute la transcription)")
     ap.add_argument("--no-silence-cut", action="store_true")
     a = ap.parse_args()
 
     st = json.loads((ROOT / "style.json").read_text())
-    rush = Path(a.rush).resolve()
-    name = rush.stem
+    rushes = [str(Path(r).resolve()) for r in a.rush]
+    name = a.name or Path(rushes[0]).stem
     work = ROOT / "work" / name
     work.mkdir(parents=True, exist_ok=True)
     (ROOT / "output").mkdir(exist_ok=True)
 
-    src = str(rush)
+    src = rushes[0]
+    if len(rushes) > 1:
+        print(f"0/4 Assemblage de {len(rushes)} rushes")
+        src = concat_rushes(rushes, str(work / "concat.mp4"), st)
+
     if st["remove_silences"] and not a.no_silence_cut and has_audio(src):
         print("1/4 Suppression des silences")
         src = cut_silences(src, str(work / "tight.mp4"), st)
     else:
         print("1/4 Suppression des silences : ignorée")
 
-    words_json = work / "words.json"
     if a.words:
         print(f"2/4 Transcription : {a.words}")
         words = json.loads(Path(a.words).read_text())
     else:
         print("2/4 Transcription mot par mot")
-        words = transcribe(src, words_json, st)
+        words = transcribe(src, work / "words_raw.json", st)
+        if a.script:
+            words = align_to_script(words, Path(a.script).read_text())
+            print("  Texte calé sur le script")
+        (work / "words.json").write_text(json.dumps(words, ensure_ascii=False, indent=1))
 
     print("3/4 Sous-titres")
     ass = work / "subs.ass"
-    build_ass(words, ass, st)
+    build_ass(words, ass, st, a.keywords)
 
     print("4/4 Rendu 1080x1920")
     out = ROOT / "output" / f"{name}_reel.mp4"

@@ -2,3 +2,4 @@ rush/*
 output/*
 work/*
 !*/.gitkeep
+models/

@@ -3,12 +3,12 @@
   "height": 1920,
   "fps": 30,
   "font": "Inter ExtraBold",
-  "font_size": 118,
+  "font_size": 124,
   "color_text": "#FFFFFF",
   "color_highlight": "#D2042D",
   "outline": 7,
   "shadow": 3,
-  "subtitle_margin_bottom": 620,
+  "subtitle_margin_bottom": 440,
   "uppercase": false,
   "pop_animation": true,
   "cut_every": 1.5,
@@ -17,6 +17,7 @@
   "silence_threshold_db": -35,
   "silence_min_duration": 0.35,
   "silence_padding": 0.08,
-  "whisper_model": "medium",
-  "language": "fr"
+  "whisper_model": "small",
+  "language": "fr",
+  "strip_punctuation": true
 }

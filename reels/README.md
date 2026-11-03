@@ -18,6 +18,17 @@ python3 reel.py rush/mon_rush.mp4
 python3 reel.py rush/mon_rush.mp4 --words work/mon_rush/words.json
 ```
 
+## Plusieurs rushes + script
+```bash
+python3 reel.py rush/rush_1.mp4 rush/rush_2.mp4 rush/rush_3.mp4 --name becoming_her_intro \
+  --script projets/becoming_her_intro/script.txt --keywords projets/becoming_her_intro/keywords.txt
+```
+- Les rushes sont montés dans l'ordre donné.
+- `--script` : whisper donne les timings, le script donne l'orthographe (Maïna -> Maena, Bicomy Heard -> Becoming Her).
+  Les impros dites à l'oral mais absentes du script sont gardées.
+- `--keywords` : mots en couleur propres à cette vidéo (en plus de `keywords.txt`).
+
 ## Dépendances
 - ffmpeg (avec libass), polices Inter (déjà installées)
-- `pip install faster-whisper` (modèle `medium`, téléchargé depuis huggingface.co au premier lancement)
+- `pip install faster-whisper` ; modèle whisper `small` dans `models/whisper-small/` (non versionné).
+  Si huggingface.co est autorisé, mettre `"whisper_model": "medium"` dans `style.json` pour plus de précision.
