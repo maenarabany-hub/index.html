@@ -505,12 +505,23 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
             out = base * mask + behind * (1 - mask)
             lock.draw_front(out, t, W)
         else:
-            seg.prev, head_top = None, None
+            if not (st.get("cinematic") or captions is not None):   # garder le lissage du détourage
+                seg.prev = None
+            head_top = None
             out = base
         for w in wids:
             w.draw(out, t)
+        if st.get("cinematic"):
+            if br is not None:    # B-roll : pas de flou (détourage peu fiable sur les plans larges)
+                pm = np.ones((H, W, 1), np.float32)
+                if captions is not None and captions.active(t):
+                    seg.person(base8)
+            else:
+                pm = mask if lock.active(t) else seg.person(base8)
+            out = cinematic(out, pm, st)
+            base = out.copy()            # les mains repassent devant le texte avec le même rendu
         if captions is not None and captions.active(t):
-            if not lock.active(t):
+            if not lock.active(t) and not st.get("cinematic"):
                 seg.person(base8)
             captions.draw(out, t, seg.skin, base)
         enc.stdin.write(np.clip(out, 0, 255).astype(np.uint8).tobytes())
@@ -593,3 +604,43 @@ class CleanGrade:
         lab[:, :, 1] = cv2.LUT(lab[:, :, 1], alut)
         lab[:, :, 2] = cv2.LUT(lab[:, :, 2], blut)
         return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+def cinematic(img, mask, st, _cache={}):
+    """Mode cinématique (« mode portrait ») : fond flou sans halo, légèrement plus sombre et
+    désaturé, vignette douce, grain fin. La personne (mask=1) reste intacte.
+    img : float32 BGR 0..255, mask : float32 HxWx1."""
+    import cv2
+    H, W = img.shape[:2]
+    s = 4                                            # le flou est calculé en quart de résolution
+    small = cv2.resize(img, (W // s, H // s), interpolation=cv2.INTER_AREA)
+    m = cv2.resize(mask, (W // s, H // s), interpolation=cv2.INTER_AREA)
+    if m.ndim == 2:
+        m = m[:, :, None]
+    bgw = 1.0 - np.clip(m * 1.3, 0, 1)               # fond seulement (la personne ne « bave » pas)
+    sig = st.get("cine_blur", 11) / 2
+    num = cv2.GaussianBlur(small * bgw, (0, 0), sig)
+    den = cv2.GaussianBlur(bgw, (0, 0), sig)
+    if den.ndim == 2:
+        den = den[:, :, None]
+    blur = num / np.maximum(den, 1e-3)
+    blur = cv2.resize(blur, (W, H), interpolation=cv2.INTER_LINEAR)
+    gray = blur.mean(axis=2, keepdims=True)
+    blur = (blur * 0.85 + gray * 0.15) * st.get("cine_bg_dim", 0.86)    # profondeur
+    out = img * mask + blur * (1 - mask)
+    if (W, H) not in _cache:
+        yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+        d = np.sqrt(((xx - W / 2) / (W * 0.62)) ** 2 + ((yy - H * 0.47) / (H * 0.62)) ** 2)
+        _cache[(W, H)] = (1 - st.get("cine_vignette", 0.22) * np.clip(d - 0.45, 0, 1) ** 1.4)[:, :, None]
+    out = out * _cache[(W, H)]
+    g = st.get("cine_grain", 2.2)
+    if g:   # grain fin : 8 textures pré-calculées qu'on fait tourner
+        key = ("grain", W, H)
+        if key not in _cache:
+            rng = np.random.default_rng(3)
+            _cache[key] = [rng.normal(0, g, (H // 2, W // 2, 1)).astype(np.float32).repeat(2, 0).repeat(2, 1)
+                           for _ in range(8)]
+            _cache["gi"] = 0
+        _cache["gi"] = (_cache["gi"] + 1) % 8
+        out = out + _cache[key][_cache["gi"]]
+    return out

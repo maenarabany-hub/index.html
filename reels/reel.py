@@ -462,6 +462,7 @@ def main():
     ap.add_argument("--broll", help="illustrations : projets/<nom>/broll.json")
     ap.add_argument("--widgets", help="widgets animés : projets/<nom>/widgets.json")
     ap.add_argument("--minimal", action="store_true", help="preset minimal : sous-titres typographiques serif")
+    ap.add_argument("--cinematic", action="store_true", help="mode cinématique : fond flou, vignette, grain")
     ap.add_argument("--edl", help="liste de montage : morceaux à garder, dans l'ordre (projets/<nom>/edl.json)")
     ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
     ap.add_argument("--no-silence-cut", action="store_true")
@@ -526,8 +527,9 @@ def main():
         editorial.build_front_ass([], ass, st, test, total := duration(src))
         caps = minimal.Captions(fixed, test, st)
         print(f"4/4 Rendu 1080x1920 minimal ({len(caps.groups)} blocs typographiques)")
-        out = ROOT / "output" / f"{name}_minimal.mp4"
-        st = dict(st, clean_grade=st.get("min_clean_grade", True), cam_inout=st.get("min_zoom_inout", True))
+        out = ROOT / "output" / f"{name}_minimal{'_cine' if a.cinematic else ''}.mp4"
+        st = dict(st, clean_grade=st.get("min_clean_grade", True), cam_inout=st.get("min_zoom_inout", True),
+                  cinematic=a.cinematic)
         kt, last = [], -9.0   # zooms doux sur les mots clés, espacés d'au moins 2.5 s
         for g in caps.groups:
             if (len(g["key"]) > 1 or test(g["key"][0])) and g["key"][0]["start"] - last > 2.5:
