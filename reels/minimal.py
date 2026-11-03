@@ -20,6 +20,12 @@ SMALL = str(FONTS / "BodoniModa-500-normal.ttf")
 ITAL = str(FONTS / "BodoniModa-500-italic.ttf")
 
 
+def smooth(x):
+    """Courbe douce (entrée et sortie lentes)."""
+    x = min(max(x, 0.0), 1.0)
+    return x * x * x * (x * (6 * x - 15) + 10)
+
+
 def clean(w):
     return re.sub(r"[.,;:…—!?]+$", "", w).strip()
 
@@ -48,6 +54,37 @@ def _text_img(text, path, size, color, shadow=True, track=0.0, condense=1.0):
     return np.array(img), int(pad * condense)
 
 
+def _wrap(txt, n):
+    lines, cur = [], ""
+    for w in txt.split():
+        if cur and len(cur) + 1 + len(w) > n:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = (cur + " " + w).strip()
+    return lines + [cur]
+
+
+def _stack(lines, path, size, color, align, **kw):
+    """Plusieurs lignes empilées (alignées à gauche ou à droite) -> (RGBA, pad)."""
+    imgs = [_text_img(l, path, size, color, **kw) for l in lines]
+    if len(imgs) == 1:
+        return imgs[0]
+    pad = imgs[0][1]
+    gap = int(size * 0.12)
+    inner = [(im[pad:im.shape[0] - pad], im) for im, _ in imgs]
+    w_max = max(im.shape[1] for _, im in inner)
+    H_ = sum(c.shape[0] for c, _ in inner) + gap * (len(inner) - 1) + 2 * pad
+    out = np.zeros((H_, w_max, 4), np.uint8)
+    y = pad
+    for c, im in inner:
+        x = 0 if align == "left" else w_max - im.shape[1]
+        reg = out[y:y + c.shape[0], x:x + im.shape[1]]
+        out[y:y + c.shape[0], x:x + im.shape[1]] = np.maximum(reg, c)
+        y += c.shape[0] + gap
+    return out, pad
+
+
 def _n(w):
     import unicodedata
     w = unicodedata.normalize("NFD", w.lower())
@@ -70,9 +107,21 @@ def make_groups(words, is_key, phrases=(), max_words=6):
         n = max(1, -(-len(c) // max_words))
         size = -(-len(c) // n)
         chunks += [c[k:k + size] for k in range(0, len(c), size)]
+    # fusion des morceaux trop courts pour être lus (même phrase, même morceau du montage)
+    MIN_DUR, merged = 1.8, []
+    for c in chunks:
+        if merged:
+            p = merged[-1]
+            dur = c[0]["start"] - p[0]["start"]
+            same_seg = p[0].get("_seg") == c[0].get("_seg")
+            sentence_end = re.search(r"[.!?]$", p[-1]["w"])
+            if same_seg and len(p) + len(c) <= 9 and (dur < MIN_DUR and not sentence_end or dur < 1.0):
+                merged[-1] = p + c
+                continue
+        merged.append(c)
     ph = [p.split() for p in phrases]
     out = []
-    for g in chunks:
+    for g in merged:
         toks = [_n(w["w"]) for w in g]
         span = None
         for p in sorted(ph, key=len, reverse=True):     # 1) expression clé
@@ -86,15 +135,24 @@ def make_groups(words, is_key, phrases=(), max_words=6):
         if not span:                                     # 2) mot clé, sinon chiffre, sinon le plus long
             keys = [k for k, w in enumerate(g) if is_key(w) and not re.search(r"\d", w["w"])]
             digits = [k for k, w in enumerate(g) if re.search(r"\d", w["w"])]
-            k = max(keys, key=lambda k: len(clean(g[k]["w"]))) if keys else digits[0] if digits else max(range(len(g)), key=lambda k: len(clean(g[k]["w"])))
+            k = max(keys, key=lambda k: len(clean(g[k]["w"]))) if keys else digits[0] if digits else \
+                max(range(len(g)), key=lambda k: len(clean(g[k]["w"])))
             span = (k, k + 1)
         a, b = span
         out.append({"before": g[:a], "key": g[a:b], "after": g[b:], "start": g[0]["start"], "end": g[-1]["end"]})
-    FADE = 0.2
-    for i, g in enumerate(out):   # le fondu de sortie se termine AVANT le bloc suivant (pas de fantôme)
-        nxt = out[i + 1]["start"] if i + 1 < len(out) else g["end"] + 0.8
-        g["until"] = max(g["key"][-1]["start"] + 0.25, min(nxt - FADE, g["end"] + 0.5))
-        g["fade"] = max(0.05, min(FADE, nxt - g["until"]))
+    EXIT = 0.3
+    LEAD = 0.18   # chaque bloc arrive un peu avant la voix : plus de temps pour lire
+    prev_end = -1.0
+    for g in out:
+        g["start"] = max(g["start"] - LEAD, prev_end)
+        prev_end = g["end"]
+    for i, g in enumerate(out):   # la sortie se termine AVANT le bloc suivant (pas de fantôme)
+        nxt = out[i + 1] if i + 1 < len(out) else None
+        ns = nxt["start"] if nxt else g["end"] + 1.0
+        g["until"] = max(g["key"][-1]["start"] + 0.45, min(ns - EXIT, g["end"] + 0.8))
+        g["fade"] = EXIT
+        if nxt and nxt["start"] < g["until"] + g["fade"]:    # jamais deux blocs en même temps
+            nxt["start"] = g["until"] + g["fade"]
     return out
 
 
@@ -126,57 +184,55 @@ class Captions:
             txt = " ".join(clean(w["w"]) if i == len(ws) - 1 and part == "after" else w["w"]
                            for i, w in enumerate(ws)).strip()
             txt = re.sub(r"[.;:…—]+$", "", txt)
-            self.cache[key] = (_text_img(txt, SMALL, 74, self.color, track=-0.02, condense=0.88) if part == "before"
-                               else _text_img(txt, ITAL, 68, self.color, track=-0.01)) if txt else None
+            if not txt:
+                self.cache[key] = None
+            elif part == "before":   # serif droit, aligné à gauche, 2 lignes si besoin
+                self.cache[key] = _stack(_wrap(txt, 28), SMALL, 74, self.color, "left", track=-0.02, condense=0.88)
+            else:                    # italique, aligné à droite
+                self.cache[key] = _stack(_wrap(txt, 30), ITAL, 68, self.color, "right", track=-0.01)
         return self.cache[key]
 
     def active(self, t):
-        return any(g["start"] - 0.02 <= t <= g["until"] + 0.35 for g in self.groups)
+        return any(g["start"] - 0.02 <= t <= g["until"] + g["fade"] for g in self.groups)
 
     def draw(self, canvas, t, front_mask=None, base=None):
+        """Placement fixe (marges constantes) et mouvements lents : entrée en fondu qui monte,
+        sortie en fondu qui continue de monter, sans saut d'un bloc à l'autre."""
         W = self.W
+        ENTER = 0.45
+        left, right = 110, W - 110            # ancrages fixes : les lignes ne sautent plus
         for g in self.groups:
-            if not (g["start"] - 0.02 <= t <= g["until"] + 0.35):
+            if not (g["start"] - 0.02 <= t <= g["until"] + g["fade"]):
                 continue
-            if t > g["until"] + g["fade"]:
-                continue
-            fade = 1 - ease_out((t - g["until"]) / g["fade"]) if t > g["until"] else 1.0
+            out_p = smooth((t - g["until"]) / g["fade"]) if t > g["until"] else 0.0
+            fade, lift = 1 - out_p, -18 * out_p
             big, bpad, size = self._big(g)
-            bw = big.shape[1] - 2 * bpad
             bh = big.shape[0] - 2 * bpad
-            x0 = (W - bw) / 2                     # bord gauche du grand mot
             yb = self.y
-            # 1) petits mots avant, alignés à gauche, au-dessus
-            if g["before"] and t >= g["before"][0]["start"] - 0.02:
-                im = self._small(g, "before", len(g["before"]))   # la ligne entière, en fondu doux
+            if g["before"]:
+                im = self._small(g, "before", len(g["before"]))
                 if im:
                     img, pad = im
-                    q = ease_out((t - g["before"][0]["start"]) / 0.3)
-                    sh = img.shape[0] - 2 * pad
-                    sw = img.shape[1] - 2 * pad
-                    cx = min(max(x0 + sw / 2, 60 + sw / 2), W - 60 - sw / 2)   # reste dans l'écran
-                    over(canvas, img, cx, yb - bh / 2 - sh / 2 - 22 + 14 * (1 - q), fade * q)
-            # 2) grand mot, quand il est prononcé
-            ks = g["key"][0]["start"]
+                    q = smooth((t - g["start"]) / ENTER)
+                    sh, sw = img.shape[0] - 2 * pad, img.shape[1] - 2 * pad
+                    over(canvas, img, left + sw / 2, yb - bh / 2 - sh / 2 - 22 + 16 * (1 - q) + lift, fade * q)
+            ks = max(g["key"][0]["start"], g["start"])
             if t >= ks - 0.02:
-                p = ease_out((t - ks) / 0.3)
+                p = smooth((t - ks) / ENTER)
                 img = big
-                if p < 0.97:   # arrive légèrement flou puis net (mise au point rapide)
+                if p < 0.97:   # légère mise au point
                     import cv2
-                    k = int(1 + 9 * (1 - p)) * 2 + 1
+                    k = int(1 + 6 * (1 - p)) * 2 + 1
                     img = cv2.GaussianBlur(big, (k, k), 0)
-                alpha = min(1.0, (t - ks) / 0.15)
-                over(canvas, img, W / 2, yb + 14 * (1 - p), alpha * fade, 1.025 - 0.025 * p)
-            # 3) petits mots après, en italique, alignés à droite, en dessous
-            if g["after"] and t >= g["after"][0]["start"] - 0.02:
+                over(canvas, img, W / 2, yb + 16 * (1 - p) + lift, p * fade, 1.02 - 0.02 * p)
+            as_ = max(g["after"][0]["start"], g["start"]) if g["after"] else 0
+            if g["after"] and t >= as_ - 0.02:
                 im = self._small(g, "after", len(g["after"]))
                 if im:
                     img, pad = im
-                    q = ease_out((t - g["after"][0]["start"]) / 0.3)
-                    fade_a = fade * q
-                    sh = img.shape[0] - 2 * pad
-                    sw = img.shape[1] - 2 * pad
-                    cx = min(max(x0 + bw - sw / 2, 60 + sw / 2), W - 60 - sw / 2)
-                    over(canvas, img, cx, yb + bh / 2 + sh / 2 + 26 + 14 * (1 - q), fade_a)
+                    q = smooth((t - as_) / ENTER)
+                    sh, sw = img.shape[0] - 2 * pad, img.shape[1] - 2 * pad
+                    cx = max(right - sw / 2, left + sw / 2)
+                    over(canvas, img, cx, yb + bh / 2 + sh / 2 + 26 + 16 * (1 - q) + lift, fade * q)
         if front_mask is not None and base is not None:   # les mains repassent devant le texte
             canvas[:] = canvas * (1 - front_mask) + base * front_mask

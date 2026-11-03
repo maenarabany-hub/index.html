@@ -462,6 +462,7 @@ def main():
     ap.add_argument("--broll", help="illustrations : projets/<nom>/broll.json")
     ap.add_argument("--widgets", help="widgets animés : projets/<nom>/widgets.json")
     ap.add_argument("--minimal", action="store_true", help="preset minimal : sous-titres typographiques serif")
+    ap.add_argument("--preview", type=float, help="ne rendre que les N premières secondes (aperçu rapide)")
     ap.add_argument("--cinematic", action="store_true", help="mode cinématique : fond flou, vignette, grain")
     ap.add_argument("--edl", help="liste de montage : morceaux à garder, dans l'ordre (projets/<nom>/edl.json)")
     ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
@@ -516,6 +517,11 @@ def main():
 
     print("3/4 Sous-titres")
     ass = work / "subs.ass"
+    if a.preview:
+        prev = str(work / "preview_src.mp4")
+        run(["ffmpeg", "-y", "-v", "error", "-i", src, "-t", str(a.preview), "-c", "copy", prev])
+        src, name = prev, name + "_apercu"
+
     if a.minimal:
         import editorial
         import minimal
