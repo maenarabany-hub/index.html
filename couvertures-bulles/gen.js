@@ -13,6 +13,7 @@ const matcha=`<svg viewBox="0 0 200 200"><path d="M24 96 H176 C176 146 144 176 1
 const ballet=`<svg viewBox="0 0 200 200"><circle cx="104" cy="34" r="16" fill="${R}"/><path d="M100 56 L94 112 M96 66 C120 54 140 36 150 14 M96 70 C76 80 58 84 38 76 M94 112 L60 186 M94 112 C120 118 150 112 176 96" ${S}/><path d="M80 118 C88 104 104 104 112 118" ${S} stroke-width="5"/></svg>`;
 const column=`<svg viewBox="0 0 200 200"><circle cx="150" cy="44" r="22" fill="${R}"/><path d="M40 70 H130 M46 82 H124 M56 82 V164 M76 82 V164 M94 82 V164 M114 82 V164 M44 164 H126 M36 180 H134" ${S}/><path d="M36 70 C40 60 50 60 54 66 M134 70 C130 60 120 60 116 66" ${S} stroke-width="5"/></svg>`;
 const lunettes=`<svg viewBox="0 0 200 200"><path d="M16 92 H184" ${S}/><path d="M24 92 H90 C90 128 76 146 56 146 C34 146 24 126 24 92Z" fill="${R}"/><path d="M110 92 H176 C176 126 166 146 144 146 C124 146 110 128 110 92Z" fill="${R}"/><path d="M90 98 C96 90 104 90 110 98" ${S} stroke-width="5"/><path d="M150 30 l5 14 14 5 -14 5 -5 14 -5 -14 -14 -5 14 -5Z" fill="${R}"/></svg>`;
+const camera=`<svg viewBox="0 0 200 200"><rect x="22" y="60" width="156" height="112" rx="22" ${S}/><path d="M70 60 L82 38 H118 L130 60" ${S}/><circle cx="100" cy="116" r="32" ${S}/><circle cx="100" cy="116" r="14" fill="${R}"/><circle cx="152" cy="84" r="7" fill="${R}"/></svg>`;
 // [fichier, mot (Noto Serif), taille, étiquette (CY Grotesk), icône]
 const covers=[
  ['me','Me',380,'Maena',mirror],
@@ -24,6 +25,7 @@ const covers=[
  ['style','Style',380,'Outfits',hanger],
  ['matcha','Matcha',380,'Ma pause',matcha],
  ['danse','Danse',380,'Dance',ballet],
+ ['daily','Daily',380,'Vraie vie',camera],
  ['greece','Greece',380,'Voyage',column],
 ];
 (async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1080,height:1920}});
