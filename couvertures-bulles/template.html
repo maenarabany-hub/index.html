@@ -1,19 +1,15 @@
 <!doctype html><html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,400;1,500&family=DM+Sans:wght@500&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wdth,wght@1,62.5..100,300..600&family=Archivo:wdth,wght@112,500&display=block" rel="stylesheet">
 <style>
-:root{--creme:#F4EAE1;--creme2:#EBDDD1;--bordeaux:#7A1E2C;--cerise:#B3263A;--rose:#D9A7A0}
+:root{--fond:#1F1214;--cerise:#561519;--rose:#E8B0B0;--blanc:#FFF7F5}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:1080px;height:1920px;background:var(--creme)}
-.c{width:1080px;height:1920px;position:relative;background:
- radial-gradient(circle at 50% 50%, #F8F0E8 0 30%, var(--creme) 60%)}
-.ring{position:absolute;left:50%;top:50%;width:760px;height:760px;transform:translate(-50%,-50%);
- border-radius:50%;border:3px solid var(--rose)}
-.ring2{position:absolute;left:50%;top:50%;width:800px;height:800px;transform:translate(-50%,-50%);
- border-radius:50%;border:1.5px solid var(--rose);opacity:.55}
-.in{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;width:720px}
-.ic{height:210px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:28px}
-.ic svg{height:200px;width:auto}
-.w{font-family:'Playfair Display',serif;font-style:italic;font-weight:400;color:var(--bordeaux);line-height:1;letter-spacing:-1px}
-.tag{font-family:'DM Sans',sans-serif;font-weight:500;font-size:30px;letter-spacing:9px;color:var(--cerise);margin-top:34px;text-transform:uppercase}
-</style></head><body><div class="c"><div class="ring2"></div><div class="ring"></div>
-<div class="in"><div class="ic">__ICON__</div><div class="w" style="font-size:__SIZE__px">__WORD__</div><div class="tag">__TAG__</div></div></div></body></html>
+html,body{width:1080px;height:1920px;background:var(--fond)}
+.c{width:1080px;height:1920px;position:relative;background:radial-gradient(circle at 50% 50%,#2E1A1C 0 25%,var(--fond) 55%)}
+.ring{position:absolute;left:50%;top:50%;width:780px;height:780px;transform:translate(-50%,-50%);border-radius:50%;border:3px solid var(--rose);opacity:.55}
+.in{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;width:760px;display:flex;flex-direction:column;align-items:center}
+.ic{height:180px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:40px}
+.ic svg{height:175px;width:auto}
+.tag{font-family:'CY Grotesk','Archivo',sans-serif;font-stretch:112%;font-weight:500;font-size:46px;color:var(--blanc);background:var(--cerise);padding:10px 22px 8px;text-transform:uppercase;letter-spacing:-.5px;position:relative;z-index:2;margin-bottom:-34px}
+.w{font-family:'Noto Serif',serif;font-style:italic;font-weight:400;font-variation-settings:'wdth' 70;color:var(--rose);line-height:1;letter-spacing:-4px;text-transform:uppercase;white-space:nowrap}
+</style></head><body><div class="c"><div class="ring"></div>
+<div class="in"><div class="ic">__ICON__</div><div class="tag">__TAG__</div><div class="w" style="font-size:__SIZE__px">__WORD__</div></div></div></body></html>
