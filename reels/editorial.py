@@ -567,18 +567,20 @@ class CleanGrade:
 
     def _build(self, frame):
         import cv2
+        st = self.st
         lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
         L = lab[:, :, 0]
-        lo, hi = np.percentile(L, 1.0), np.percentile(L, 99.5)
+        lo, hi = np.percentile(L, 0.5), np.percentile(L, 99.7)
         x = np.arange(256, dtype=np.float32)
-        y = np.clip((x - lo) / max(hi - lo, 1), 0, 1)            # niveaux
-        y = 0.03 + 0.92 * y                                       # noirs posés, blancs propres
-        y = y + 0.06 * np.sin(np.pi * y) * (y - 0.5) * 2          # S doux
+        y = np.clip((x - lo) / max(hi - lo, 1), 0, 1)             # niveaux : vrais noirs, vrais blancs
+        y = y ** st.get("grade_gamma", 1.22)                       # tons moyens plus denses (moins fade)
+        c = st.get("grade_contrast", 0.10)
+        y = np.clip(y + c * np.sin(2 * np.pi * y) * -0.5 + c * (y - 0.5) * 0.6, 0, 1)   # contraste en S
+        y = 0.01 + 0.97 * y
         Llut = np.clip(y * 255, 0, 255).astype(np.uint8)
-        k_a, k_b = self.st.get("grade_a", 0.82), self.st.get("grade_b", 0.9)
-        shift_a = self.st.get("grade_shift_a", -2.5)              # moins de rouge-rose
-        alut = np.clip((x - 128) * k_a + 128 + shift_a, 0, 255).astype(np.uint8)
-        blut = np.clip((x - 128) * k_b + 128, 0, 255).astype(np.uint8)
+        k_a, k_b = st.get("grade_a", 0.93), st.get("grade_b", 0.98)          # saturation quasi intacte
+        alut = np.clip((x - 128) * k_a + 128 + st.get("grade_shift_a", -2.0), 0, 255).astype(np.uint8)
+        blut = np.clip((x - 128) * k_b + 128 + st.get("grade_shift_b", 0.5), 0, 255).astype(np.uint8)
         return Llut, alut, blut
 
     def __call__(self, frame, key):

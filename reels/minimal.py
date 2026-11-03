@@ -15,26 +15,37 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from editorial import ease_out, hex_rgb, over
 
 FONTS = Path(__file__).resolve().parent / "fonts"
-BIG = str(FONTS / "BodoniModa-500-normal.ttf")
-SMALL = str(FONTS / "BodoniModa-400-normal.ttf")
-ITAL = str(FONTS / "BodoniModa-400-italic.ttf")
+BIG = str(FONTS / "BodoniModa-700-normal.ttf")      # Didone grasse, lettres serrées (comme la référence)
+SMALL = str(FONTS / "BodoniModa-500-normal.ttf")
+ITAL = str(FONTS / "BodoniModa-500-italic.ttf")
 
 
 def clean(w):
     return re.sub(r"[.,;:…—!?]+$", "", w).strip()
 
 
-def _text_img(text, path, size, color, shadow=True):
+def _text_img(text, path, size, color, shadow=True, track=0.0, condense=1.0):
+    """Texte -> RGBA. `track` : espacement des lettres en fraction de la taille (négatif = serré)."""
     f = ImageFont.truetype(path, size)
     l, t, r, b = f.getbbox(text)
+    adv = [f.getlength(ch) + track * size for ch in text]
+    width = int(sum(adv) - track * size + (r - l) - f.getlength(text)) + 4
     pad = 30
-    img = Image.new("RGBA", (r - l + 2 * pad, b - t + 2 * pad), (0, 0, 0, 0))
+    img = Image.new("RGBA", (max(width, 1) + 2 * pad, b - t + 2 * pad), (0, 0, 0, 0))
+
+    def draw(d, dy, fill):
+        x = pad - l
+        for ch, a in zip(text, adv):
+            d.text((x, pad - t + dy), ch, font=f, fill=fill)
+            x += a
     if shadow:   # ombre très douce, juste pour la lisibilité
         sh = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        ImageDraw.Draw(sh).text((pad - l, pad - t + 4), text, font=f, fill=(0, 0, 0, 110))
+        draw(ImageDraw.Draw(sh), 4, (0, 0, 0, 110))
         img = Image.alpha_composite(img, sh.filter(ImageFilter.GaussianBlur(8)))
-    ImageDraw.Draw(img).text((pad - l, pad - t), text, font=f, fill=color + (255,))
-    return np.array(img), pad
+    draw(ImageDraw.Draw(img), 0, color + (255,))
+    if condense != 1.0:
+        img = img.resize((int(img.width * condense), img.height), Image.LANCZOS)
+    return np.array(img), int(pad * condense)
 
 
 def _n(w):
@@ -99,9 +110,9 @@ class Captions:
     def _big(self, g):
         key = ("big", id(g))
         if key not in self.cache:
-            txt, size = " ".join(clean(w["w"]) for w in g["key"]).upper(), 340
+            txt, size = " ".join(clean(w["w"]) for w in g["key"]).upper(), 270
             while True:
-                img, pad = _text_img(txt, BIG, size, self.color)
+                img, pad = _text_img(txt, BIG, size, self.color, track=-0.045, condense=0.94)
                 if img.shape[1] - 2 * pad <= self.max_w or size < 90:
                     break
                 size = int(size * 0.93)
@@ -115,7 +126,8 @@ class Captions:
             txt = " ".join(clean(w["w"]) if i == len(ws) - 1 and part == "after" else w["w"]
                            for i, w in enumerate(ws)).strip()
             txt = re.sub(r"[.;:…—]+$", "", txt)
-            self.cache[key] = _text_img(txt, SMALL if part == "before" else ITAL, 78, self.color) if txt else None
+            self.cache[key] = (_text_img(txt, SMALL, 74, self.color, track=-0.02, condense=0.88) if part == "before"
+                               else _text_img(txt, ITAL, 68, self.color, track=-0.01)) if txt else None
         return self.cache[key]
 
     def active(self, t):
