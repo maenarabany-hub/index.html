@@ -98,19 +98,31 @@ class Lockups:
             self.items.append({"start": e["start"], "end": e["end"], "y": e.get("y", 560),
                                "words": words, "label": label})
 
-    def draw_behind(self, canvas, t, W):
+    def active(self, t):
+        return any(it["start"] - 0.01 <= t <= it["end"] + 0.2 for it in self.items)
+
+    def draw_behind(self, canvas, t, W, head_top=None):
         for it in self.items:
             if not (it["start"] - 0.01 <= t <= it["end"] + 0.2):
+                it.pop("locked", None)
                 continue
             out_a = 1 - ease_out((t - it["end"]) / 0.18) if t > it["end"] else 1.0
             cur = [w for w in it["words"] if w[0] <= t + 1e-3]
             if not cur:
                 continue
             ws, img = cur[-1]
+            # position calée sur le haut de la tête : ~45 % du mot passe derrière les cheveux,
+            # figée à l'apparition du mot pour éviter que le texte bouge
+            locked = it.setdefault("locked", {})
+            if ws not in locked:
+                h = img.shape[0]
+                y = it["y"] if head_top is None else head_top - 0.05 * h
+                locked[ws] = max(h / 2 + 150, min(y, it["y"] + 200))
+            it["cur_y"], it["cur_h"] = locked[ws], img.shape[0]
             p = ease_out((t - ws) / 0.35)
             scale = (1.18 - 0.18 * p) * (1 + 0.03 * (t - ws) / 3)   # arrive en dézoomant + dérive
             alpha = min(1.0, (t - ws) / 0.12) * out_a
-            over(canvas, img, W / 2, it["y"] + 30 * (1 - p), alpha, scale)
+            over(canvas, img, W / 2, it["cur_y"] + 30 * (1 - p), alpha, scale)
 
     def draw_front(self, canvas, t, W):
         for it in self.items:
@@ -122,9 +134,10 @@ class Lockups:
             # révélation de la boîte de gauche à droite
             vis = max(1, int(lab.shape[1] * p))
             cut = lab[:, :vis]
-            h_word = it["words"][0][1].shape[0]
+            if "cur_y" not in it:
+                continue
             x = W / 2 - (lab.shape[1] - vis) / 2
-            over(canvas, cut, x, it["y"] - h_word * 0.42, out_a)
+            over(canvas, cut, x, max(lab.shape[0] / 2 + 120, it["cur_y"] - it["cur_h"] * 0.42), out_a)
 
 
 # ------------------------------------------------------------ sous-titres
@@ -155,8 +168,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,Inter Medium,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,0,0,1,0,3,5,60,60,0,1
-Style: Handle,Inter Medium,34,&H60FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0,0,2,0,0,250,1
+Style: Sub,Inter Medium,80,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,0,0,1,0,3,5,60,60,0,1
+Style: Handle,Inter Medium,38,&H60FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0,0,2,0,0,250,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -174,7 +187,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             d = int((w["start"] - g0) * 1000)
             reveal = f"\\alpha&HFF&\\t({d},{d + 90},\\alpha&H00&)"
             if kw_test(w):
-                parts.append(f"{{\\fnNoto Serif Display Medium\\i1\\fs104\\c{pink}{reveal}}}{txt}{{\\r}}")
+                parts.append(f"{{\\fnNoto Serif Display Medium\\i1\\fs126\\c{pink}{reveal}}}{txt}{{\\r}}")
             else:
                 parts.append(f"{{{reveal}}}{txt}")
         line = " ".join(parts)
@@ -221,6 +234,16 @@ def grade(img, W, H, _cache={}):
     return img * _cache[(W, H)]
 
 
+def top_of_head(mask, prev=None):
+    """Première ligne où la personne occupe le centre de l'image (lissée dans le temps)."""
+    m = mask[:, :, 0]
+    W = m.shape[1]
+    band = m[:, int(W * 0.3):int(W * 0.7)].mean(axis=1)
+    rows = np.where(band > 0.35)[0]
+    y = float(rows[0]) if len(rows) else (prev or m.shape[0] * 0.25)
+    return y if prev is None else 0.7 * prev + 0.3 * y
+
+
 def dim_background(img, st):
     """Fond assombri et désaturé pour que le rose ressorte (look sombre de la référence)."""
     k = st.get("ed_bg_dim", 1.0)
@@ -255,7 +278,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
                 "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-shortest", dst]
     enc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
 
-    size, n = W * H * 3, 0
+    size, n, head_top = W * H * 3, 0, None
     while True:
         buf = dec.stdout.read(size)
         if len(buf) < size:
@@ -263,6 +286,8 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
         frame = np.frombuffer(buf, np.uint8).reshape(H, W, 3)
         t = n / fps
         z, dx, dy, blur, flash = cam.at(t)
+        if lock.active(t) and blur < 0.05:      # pendant un grand titre : cadrage plus large
+            z, dy = min(z, st.get("ed_max_zoom_titles", 1.06)), max(dy, -0.01)
         cx, cy = W * (0.5 + dx), H * (0.40 + dy)
 
         def warp(zz):
@@ -281,8 +306,9 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
             base = grade(base, W, H)
 
         mask = seg.person(base8)
+        head_top = top_of_head(mask, head_top)
         behind = dim_background(base, st)
-        lock.draw_behind(behind, t, W)
+        lock.draw_behind(behind, t, W, head_top)
         out = base * mask + behind * (1 - mask)
         lock.draw_front(out, t, W)
         if flash > 0:
