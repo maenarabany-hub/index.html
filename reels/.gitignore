@@ -3,3 +3,4 @@ output/*
 work/*
 !*/.gitkeep
 models/
+__pycache__/
