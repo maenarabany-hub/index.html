@@ -4,7 +4,7 @@
 Étapes :
   1. Suppression des silences (jump cuts sur les blancs)
   2. Transcription mot par mot (faster-whisper)       -> work/<nom>/words.json
-  3. Sous-titres mot par mot, Inter blanc, mots clés en rose -> work/<nom>/subs.ass
+  3. Sous-titres mot par mot, Inter blanc, mots clés en rouge cerise -> work/<nom>/subs.ass
   4. Rendu final : recadrage 9:16, punch-in alterné toutes les 1.5 s,
      sous-titres incrustés                             -> output/<nom>_reel.mp4
 

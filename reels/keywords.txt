@@ -1,6 +1,6 @@
-# Mots à mettre en rose #FF4D8D (un par ligne, insensible à la casse).
-# Les chiffres, %, € et $ sont mis en rose automatiquement.
-# Dans words.json tu peux aussi forcer un mot avec "hl": true.
+# Mots à mettre en rouge cerise #D2042D (un par ligne, insensible à la casse).
+# Les chiffres, %, € et $ sont mis en rouge automatiquement.
+# Dans words.json tu peux aussi forcer un mot en rouge avec "hl": true.
 argent
 business
 CEO
