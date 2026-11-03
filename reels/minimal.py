@@ -79,9 +79,11 @@ def make_groups(words, is_key, phrases=(), max_words=6):
             span = (k, k + 1)
         a, b = span
         out.append({"before": g[:a], "key": g[a:b], "after": g[b:], "start": g[0]["start"], "end": g[-1]["end"]})
-    for i, g in enumerate(out):
-        nxt = out[i + 1]["start"] if i + 1 < len(out) else g["end"] + 0.6
-        g["until"] = min(nxt, g["end"] + 0.5)
+    FADE = 0.2
+    for i, g in enumerate(out):   # le fondu de sortie se termine AVANT le bloc suivant (pas de fantôme)
+        nxt = out[i + 1]["start"] if i + 1 < len(out) else g["end"] + 0.8
+        g["until"] = max(g["key"][-1]["start"] + 0.25, min(nxt - FADE, g["end"] + 0.5))
+        g["fade"] = max(0.05, min(FADE, nxt - g["until"]))
     return out
 
 
@@ -124,7 +126,9 @@ class Captions:
         for g in self.groups:
             if not (g["start"] - 0.02 <= t <= g["until"] + 0.35):
                 continue
-            fade = 1 - ease_out((t - g["until"]) / 0.35) if t > g["until"] else 1.0
+            if t > g["until"] + g["fade"]:
+                continue
+            fade = 1 - ease_out((t - g["until"]) / g["fade"]) if t > g["until"] else 1.0
             big, bpad, size = self._big(g)
             bw = big.shape[1] - 2 * bpad
             bh = big.shape[0] - 2 * bpad
