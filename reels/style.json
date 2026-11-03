@@ -21,7 +21,11 @@
   "language": "fr",
   "strip_punctuation": true,
   "ed_pink": "#E7ABAF",
-  "ed_box": "#5A1419",
+  "ed_box": "#E7ABAF",
   "ed_sub_y": 1200,
-  "handle": "@maenarbny"
+  "handle": "@maenarbny",
+  "ed_word_color": "#5A1419",
+  "ed_label_text": "#5A1419",
+  "ed_grade": false,
+  "ed_bg_dim": 1.0
 }

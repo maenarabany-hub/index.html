@@ -86,7 +86,9 @@ class Lockups:
 
     def __init__(self, spec, st):
         W = st["width"]
-        pink, box, white = hex_rgb(st["ed_pink"]), hex_rgb(st["ed_box"]), (255, 255, 255)
+        pink = hex_rgb(st.get("ed_word_color", st["ed_pink"]))
+        box = hex_rgb(st["ed_box"])
+        white = hex_rgb(st.get("ed_label_text", "#FFFFFF"))
         self.items = []
         for e in spec:
             words = []
@@ -221,7 +223,9 @@ def grade(img, W, H, _cache={}):
 
 def dim_background(img, st):
     """Fond assombri et désaturé pour que le rose ressorte (look sombre de la référence)."""
-    k = st.get("ed_bg_dim", 0.5)
+    k = st.get("ed_bg_dim", 1.0)
+    if k >= 0.999:
+        return img.copy()
     gray = img.mean(axis=2, keepdims=True)
     return (img * 0.6 + gray * 0.4) * k
 
@@ -272,7 +276,9 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
             base8 = (acc / 5).astype(np.uint8)
         else:
             base8 = warp(z)
-        base = grade(base8.astype(np.float32), W, H)
+        base = base8.astype(np.float32)
+        if st.get("ed_grade", False):
+            base = grade(base, W, H)
 
         mask = seg.person(base8)
         behind = dim_background(base, st)
