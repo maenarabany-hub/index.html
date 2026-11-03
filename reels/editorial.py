@@ -292,13 +292,32 @@ WIDE = [(1.00, 0.0, 0.0), (1.05, 0.02, -0.01), (1.03, -0.02, 0.0)]
 TIGHT = [(1.00, 0.0, 0.0), (1.12, 0.0, -0.03), (1.06, 0.03, -0.01), (1.15, -0.02, -0.04)]
 
 
+def detect_source_cuts(src, thresh=4.5, min_gap=0.3):
+    """Repère les coupures déjà présentes dans les rushes (gros écart entre deux images)."""
+    W, H = 108, 192
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", src, "-vf", f"scale={W}:{H},format=gray",
+                          "-f", "rawvideo", "-"], capture_output=True).stdout
+    f = np.frombuffer(raw, np.uint8).reshape(-1, H, W).astype(np.float32)
+    d = np.abs(np.diff(f, axis=0)).mean(axis=(1, 2))
+    med = float(np.median(d))
+    fps = 30.0
+    cuts = []
+    for i, v in enumerate(d):
+        t = (i + 1) / fps
+        if v > med * thresh and (not cuts or t - cuts[-1] > min_gap):
+            cuts.append(round(t, 3))
+    return cuts
+
+
 class EdCamera:
     """Cadrage stable : changements de zoom UNIQUEMENT sur les cuts (aux fins de phrase),
     plans larges pendant les grands titres, rien pendant les illustrations."""
 
-    def __init__(self, words, total, joins, lock, brolls, kw_times, st):
-        self.smooth = not st.get("ed_cuts", False)
-        every = st.get("ed_cut_every", 3.0) if not self.smooth else 1e9
+    def __init__(self, words, total, joins, lock, brolls, kw_times, st, source_cuts=()):
+        self.smooth = not st.get("ed_cuts", False) and not source_cuts
+        every = st.get("ed_cut_every", 3.0) if not st.get("ed_cuts", False) else 3.0
+        if source_cuts:   # on ne coupe QUE là où le rush est déjà coupé : le saut devient un punch-in voulu
+            every = 1e9
         gaps = [(words[i]["end"] + words[i + 1]["start"]) / 2 for i in range(len(words) - 1)]
         strong = [g for i, g in enumerate(gaps) if re.search(r"[.,!?;:]$", words[i]["w"])]
         busy = [(b.start - 0.5, b.end + 0.5) for b in brolls]
@@ -308,13 +327,18 @@ class EdCamera:
                 continue
             if all(abs(g - c) >= every * 0.8 for c in cuts):
                 cuts.append(g)
-        self.bounds = [0.0] + sorted(c for c in cuts if c < total - 1.0) + [total]
+        cuts += [c for c in source_cuts if not any(br.start - 0.05 <= c <= br.end + 0.05 for br in brolls)]
+        self.bounds = [0.0] + sorted(set(c for c in cuts if c < total - 0.2)) + [total]
         self.framing = []
         for i in range(len(self.bounds) - 1):
             a, b = self.bounds[i], self.bounds[i + 1]
             titled = any(it["start"] < b and it["end"] > a for it in lock.items)
-            pool = WIDE if titled else TIGHT
-            self.framing.append(pool[i % len(pool)])
+            if source_cuts:   # alternance large / serré (serré plus doux sous un grand titre)
+                tight = (1.06, 0.0, -0.01) if titled else (1.13, 0.0, -0.03)
+                self.framing.append((1.0, 0.0, 0.0) if i % 2 == 0 else tight)
+            else:
+                pool = WIDE if titled else TIGHT
+                self.framing.append(pool[i % len(pool)])
         self.joins = [j for j in joins if not any(br.start - 0.05 <= j <= br.end + 0.05 for br in brolls)]
         self.kw = kw_times
         self.drift = st.get("motion_drift", 0.02)
@@ -368,7 +392,11 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
                                   "-of", "csv=p=0", src], capture_output=True, text=True).stdout)
     lock = Lockups(spec, st)
     brolls = [BRoll(e, W, H, fps) for e in broll_spec]
-    cam = EdCamera(words, total, joins, lock, brolls, keyword_times, st)
+    src_cuts = detect_source_cuts(src) if st.get("ed_mask_source_cuts", True) else []
+    # le raccord entre rushes (fondu) n'est pas une coupure à masquer
+    src_cuts = [c for c in src_cuts if all(abs(c - j) > 0.15 for j in joins)]
+    cam = EdCamera(words, total, joins, lock, brolls, keyword_times, st, src_cuts)
+    print(f"  {len(src_cuts)} coupures trouvées dans les rushes -> transformées en punch-in")
     seg = Segmenter()
     wids = wmod.load(widget_spec, st)
     sfx_path = Path(dst).with_suffix(".sfx.wav")
