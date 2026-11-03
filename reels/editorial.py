@@ -193,7 +193,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         line = " ".join(parts)
         ev.append(f"Dialogue: 1,{motion._ts(g0)},{motion._ts(g1)},Sub,,0,0,0,,"
                   f"{{\\an5\\pos({W // 2},{y})\\fad(0,80)}}{line}")
-    ev.append(f"Dialogue: 0,{motion._ts(0)},{motion._ts(total)},Handle,,0,0,0,,{st.get('handle', '@maenarbny')}")
+    if st.get("handle"):
+        ev.append(f"Dialogue: 0,{motion._ts(0)},{motion._ts(total)},Handle,,0,0,0,,{st['handle']}")
     Path(out_ass).write_text(head + "\n".join(ev) + "\n", encoding="utf-8")
 
 
@@ -331,8 +332,27 @@ class EdCamera:
         return z, dx, dy, blur
 
 
-def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st, has_audio=True, broll_spec=()):
+def sound_events(lock, brolls, cam, widgets):
+    import sfx
+    ev = [(0.0, sfx.impact(), -8)]                                  # hook : boom d'entrée
+    for it in lock.items:
+        ev.append((max(0.0, it["start"] - 0.12), sfx.whoosh(0.35), -21))
+        for ws, _ in it["words"][1:]:
+            ev.append((ws, sfx.tick(), -22))
+    for b in brolls:
+        ev.append((b.start - 0.15, sfx.whoosh(0.4), -17))
+    for j in cam.joins:
+        ev.append((j - 0.2, sfx.whoosh(0.45), -16))
+    for w in widgets:
+        ev += w.sfx()
+    return ev
+
+
+def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st, has_audio=True, broll_spec=(),
+                     widget_spec=()):
     import cv2
+    import sfx
+    import widgets as wmod
 
     W, H, fps = st["width"], st["height"], st["fps"]
     total = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -341,6 +361,10 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
     brolls = [BRoll(e, W, H, fps) for e in broll_spec]
     cam = EdCamera(words, total, joins, lock, brolls, keyword_times, st)
     seg = Segmenter()
+    wids = wmod.load(widget_spec, st)
+    sfx_path = Path(dst).with_suffix(".sfx.wav")
+    sfx.build_track(sound_events(lock, brolls, cam, wids), total, sfx_path)
+    print(f"  {len(wids)} widgets, bruitages -> {sfx_path.name}")
     print(f"  {len(cam.bounds) - 2} cuts, {len(brolls)} illustrations, {len(spec)} grands titres, "
           f"{len(cam.joins)} raccord(s) visibles")
 
@@ -351,9 +375,14 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
     enc_cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{W}x{H}",
                "-r", str(fps), "-i", "-"]
     if has_audio:
-        enc_cmd += ["-i", src, "-map", "0:v", "-map", "1:a", "-af", "loudnorm=I=-14:TP=-1:LRA=11",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
-    enc_cmd += ["-vf", f"ass='{ass_esc}'", "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+        enc_cmd += ["-i", src, "-i", str(sfx_path), "-filter_complex",
+                    f"[0:v]ass='{ass_esc}'[v];"
+                    "[1:a]aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11[voix];"
+                    "[voix][2:a]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[a]",
+                    "-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    else:
+        enc_cmd += ["-vf", f"ass='{ass_esc}'"]
+    enc_cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "19",
                 "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-shortest", dst]
     enc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
 
@@ -400,6 +429,8 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
         else:
             seg.prev, head_top = None, None
             out = base
+        for w in wids:
+            w.draw(out, t)
         enc.stdin.write(np.clip(out, 0, 255).astype(np.uint8).tobytes())
         n += 1
         if n % (fps * 5) == 0:

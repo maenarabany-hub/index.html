@@ -1,0 +1,26 @@
+[
+ {
+  "kind": "notification",
+  "start": 0.1,
+  "end": 1.55,
+  "y": 200,
+  "title": "Rappel",
+  "text": "Choisis UN truc. Un seul."
+ },
+ {
+  "kind": "search",
+  "start": 19.05,
+  "end": 21.5,
+  "type_end": 20.3,
+  "y": 420,
+  "text": "une journée type de Maena"
+ },
+ {
+  "kind": "comment",
+  "start": 48.4,
+  "end": 51.9,
+  "type_end": 50.6,
+  "y": 1430,
+  "text": "Le truc que je refuse de lâcher…"
+ }
+]
