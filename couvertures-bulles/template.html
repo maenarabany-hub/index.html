@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;1,400;1,500&family=DM+Sans:wght@500&display=block" rel="stylesheet">
+<style>
+:root{--creme:#F4EAE1;--creme2:#EBDDD1;--bordeaux:#7A1E2C;--cerise:#B3263A;--rose:#D9A7A0}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;background:var(--creme)}
+.c{width:1080px;height:1920px;position:relative;background:
+ radial-gradient(circle at 50% 50%, #F8F0E8 0 30%, var(--creme) 60%)}
+.ring{position:absolute;left:50%;top:50%;width:760px;height:760px;transform:translate(-50%,-50%);
+ border-radius:50%;border:3px solid var(--rose)}
+.ring2{position:absolute;left:50%;top:50%;width:800px;height:800px;transform:translate(-50%,-50%);
+ border-radius:50%;border:1.5px solid var(--rose);opacity:.55}
+.in{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;width:720px}
+.ic{height:210px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:28px}
+.ic svg{height:200px;width:auto}
+.w{font-family:'Playfair Display',serif;font-style:italic;font-weight:400;color:var(--bordeaux);line-height:1;letter-spacing:-1px}
+.tag{font-family:'DM Sans',sans-serif;font-weight:500;font-size:30px;letter-spacing:9px;color:var(--cerise);margin-top:34px;text-transform:uppercase}
+</style></head><body><div class="c"><div class="ring2"></div><div class="ring"></div>
+<div class="in"><div class="ic">__ICON__</div><div class="w" style="font-size:__SIZE__px">__WORD__</div><div class="tag">__TAG__</div></div></div></body></html>
