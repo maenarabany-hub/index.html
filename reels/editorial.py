@@ -377,7 +377,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
     if has_audio:
         enc_cmd += ["-i", src, "-i", str(sfx_path), "-filter_complex",
                     f"[0:v]ass='{ass_esc}'[v];"
-                    "[1:a]aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11[voix];"
+                    "[1:a]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[voix];"
                     "[voix][2:a]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[a]",
                     "-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
     else:
