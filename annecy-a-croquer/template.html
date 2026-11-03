@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wdth,wght@0,62.5..100,400..600;1,62.5..100,300..600&family=Archivo:wdth,wght@112,400;112,500;112,600&display=block" rel="stylesheet">
+<style>
+:root{--creme:#F4EAE1;--creme2:#EADBCF;--cerise:#561519;--rose:#E8B0B0;--rose2:#F2D3D1;--blanc:#FFF7F5}
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1080px;height:__H__px;background:var(--creme);overflow:hidden}
+.p{width:1080px;height:__H__px;display:flex;flex-direction:column;align-items:center;padding:__PAD__px 80px 0;position:relative}
+.tag{font-family:'CY Grotesk','Archivo',sans-serif;font-stretch:112%;font-weight:500;font-size:26px;letter-spacing:1px;color:var(--blanc);background:var(--cerise);padding:8px 18px 6px;text-transform:uppercase}
+h1{font-family:'Noto Serif',serif;font-style:italic;font-weight:400;font-variation-settings:'wdth' 72;color:var(--cerise);font-size:__T__px;line-height:.95;text-align:center;margin-top:26px;letter-spacing:-2px}
+.sub{font-family:'Archivo',sans-serif;font-stretch:112%;font-weight:500;font-size:24px;letter-spacing:5px;text-transform:uppercase;color:#8E2A30;margin-top:18px}
+.arch{width:__AW__px;height:__AH__px;margin-top:36px;border-radius:999px 999px 0 0;border:6px solid var(--rose);border-bottom:0;padding:12px 12px 0;position:relative}
+.arch div{width:100%;height:100%;border-radius:999px 999px 0 0;background:__PHOTO__;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-size:28px;color:var(--cerise);letter-spacing:3px;text-transform:uppercase}
+.cards{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:-6px;position:relative;z-index:2;__CARDS__}
+.card{background:var(--blanc);border:2px solid var(--rose2);padding:20px 24px}
+.k{font-family:'Archivo',sans-serif;font-stretch:112%;font-weight:600;font-size:19px;letter-spacing:3px;text-transform:uppercase;color:#8E2A30}
+.v{font-family:'Noto Serif',serif;font-size:31px;color:var(--cerise);margin-top:6px;line-height:1.15}
+.avis{grid-column:1/3;background:var(--cerise);border:0}
+.avis .k{color:var(--rose)}.avis .v{color:var(--blanc);font-style:italic}
+.cerise{position:absolute;right:62px;top:__PAD__px;width:70px}
+.foot{font-family:'Archivo',sans-serif;font-stretch:112%;font-size:22px;letter-spacing:4px;color:#8E2A30;text-transform:uppercase;margin-top:auto;margin-bottom:__FB__px}
+</style></head><body><div class="p">
+<svg class="cerise" viewBox="0 0 200 200"><path d="M100 30 C90 70 70 95 62 120 M100 30 C110 70 128 100 138 125" fill="none" stroke="#561519" stroke-width="7" stroke-linecap="round"/><path d="M100 30 C120 18 150 22 162 40 C140 48 118 44 100 30Z" fill="#561519"/><circle cx="60" cy="148" r="34" fill="#B3263A"/><circle cx="140" cy="150" r="34" fill="#B3263A"/></svg>
+<div class="tag">Annecy à croquer</div>
+<h1>__TITRE__</h1>
+<div class="sub">__NOM__</div>
+<div class="arch"><div>__PHTXT__</div></div>
+<div class="cards">
+<div class="card"><div class="k">À commander</div><div class="v">__PLAT__</div></div>
+<div class="card"><div class="k">Où</div><div class="v">__LIEU__</div></div>
+<div class="card"><div class="k">Budget</div><div class="v">__PRIX__</div></div>
+<div class="card"><div class="k">Pour qui</div><div class="v">__POUR__</div></div>
+<div class="card avis"><div class="k">Mon avis</div><div class="v">__AVIS__</div></div>
+</div>
+<div class="foot">@maenarbny</div>
+</div></body></html>
