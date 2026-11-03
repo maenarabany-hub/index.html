@@ -1,0 +1,5 @@
+[
+ {"file": "rush/broll/ordi.mov",    "start": 21.6,  "end": 23.45, "offset": 1.5, "zoom": [1.0, 1.06]},
+ {"file": "rush/broll/salle.mov",   "start": 23.5,  "end": 27.3,  "offset": 0.3, "zoom": [1.0, 1.08]},
+ {"file": "rush/broll/plafond.mov", "start": 31.4,  "end": 35.3,  "offset": 1.0, "zoom": [1.0, 1.08]}
+]

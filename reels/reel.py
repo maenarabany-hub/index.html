@@ -356,6 +356,70 @@ def concat_rushes(rushes, dst, st):
     return dst, joins, remap
 
 
+def apply_edl(src, segs, dst, remap):
+    """Monte les morceaux `segs` ([début, fin] en temps bout à bout) dans l'ordre donné.
+    Cut franc à l'image, micro-fondu de 15 ms sur le son (pas de clic)."""
+    parts, labels, offs, off = [], [], [], 0.0
+    for i, (a, b) in enumerate(segs):
+        ra, rb = remap(a), remap(b)
+        d = rb - ra
+        parts.append(f"[0:v]trim={ra:.3f}:{rb:.3f},setpts=PTS-STARTPTS[v{i}];"
+                     f"[0:a]atrim={ra:.3f}:{rb:.3f},asetpts=PTS-STARTPTS,"
+                     f"afade=t=in:d=0.015,afade=t=out:st={d - 0.015:.3f}:d=0.015[a{i}];")
+        labels.append(f"[v{i}][a{i}]")
+        offs.append(off)
+        off += d
+    fc = "".join(parts) + "".join(labels) + f"concat=n={len(segs)}:v=1:a=1[v][a]"
+    run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", src, "-filter_complex", fc,
+         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "15",
+         "-c:a", "aac", "-b:a", "256k", dst])
+
+    def where(t):
+        for (a, b), o in zip(segs, offs):
+            if a - 1e-3 <= t <= b + 1e-3:
+                return a, b, o
+        return None
+
+    def tmap(t):  # temps bout à bout -> temps du montage (None si coupé)
+        w = where(t)
+        return None if w is None else round(w[2] + remap(t) - remap(w[0]), 3)
+
+    def spec(obj):
+        """Recale une liste d'éléments {start,end,...} ; coupe ce qui déborde, jette ce qui est hors montage."""
+        out = []
+        for e in obj:
+            if "start" not in e:
+                out.append(e)
+                continue
+            w = where(e["start"])
+            if w is None:
+                continue
+            a, b, o = w
+            f = lambda t: round(o + remap(min(max(t, a), b)) - remap(a), 3)
+            n = dict(e, start=f(e["start"]), end=f(e.get("end", e["start"])))
+            if "type_end" in e:
+                n["type_end"] = f(e["type_end"])
+            if "words" in e:
+                n["words"] = [dict(x, start=f(x["start"])) for x in e["words"] if a - 1e-3 <= x["start"] <= b + 1e-3]
+                if not n["words"]:
+                    continue
+            if "offset" in e:
+                n["offset"] = e["offset"] + max(0.0, a - e["start"])
+            out.append(n)
+        return out
+
+    def words(ws):
+        out = []
+        for w in ws:
+            ns = tmap(w["start"])
+            if ns is None:
+                continue
+            a, b, o = where(w["start"])
+            out.append(dict(w, start=ns, end=round(o + remap(min(w["end"], b)) - remap(a), 3)))
+        return out
+    return dst, tmap, spec, words
+
+
 def remap_spec(obj, remap, keys=("start", "end", "type_end")):
     if isinstance(obj, list):
         return [remap_spec(o, remap, keys) for o in obj]
@@ -397,6 +461,7 @@ def main():
     ap.add_argument("--editorial", help="preset éditorial : grands mots derrière la personne (projets/<nom>/editorial.json)")
     ap.add_argument("--broll", help="illustrations : projets/<nom>/broll.json")
     ap.add_argument("--widgets", help="widgets animés : projets/<nom>/widgets.json")
+    ap.add_argument("--edl", help="liste de montage : morceaux à garder, dans l'ordre (projets/<nom>/edl.json)")
     ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
     ap.add_argument("--no-silence-cut", action="store_true")
     a = ap.parse_args()
@@ -413,6 +478,16 @@ def main():
         print(f"0/4 Assemblage de {len(rushes)} rushes")
         src, joins, remap = concat_rushes(rushes, str(work / "concat.mp4"), st)
 
+    edl = None
+    if a.edl:
+        segs = json.loads(Path(a.edl).read_text())
+        segs = [(x["start"], x["end"]) if isinstance(x, dict) else tuple(x) for x in segs]
+        print(f"0b/4 Montage : {len(segs)} morceaux")
+        src, tmap, edl_spec, edl_words = apply_edl(src, segs, str(work / "edit.mp4"), remap)
+        joins = []
+        edl = (edl_spec, edl_words)
+        a.no_silence_cut = True
+
     if st["remove_silences"] and not a.no_silence_cut and has_audio(src):
         print("1/4 Suppression des silences")
         tight = cut_silences(src, str(work / "tight.mp4"), st)
@@ -424,7 +499,8 @@ def main():
 
     if a.words:
         print(f"2/4 Transcription : {a.words}")
-        words = remap_spec(json.loads(Path(a.words).read_text()), remap)  # timings faits bout à bout
+        words = json.loads(Path(a.words).read_text())  # timings faits bout à bout
+        words = edl[1](words) if edl else remap_spec(words, remap)
     else:
         print("2/4 Transcription mot par mot")
         words = transcribe(src, work / "words_raw.json", st)
@@ -443,14 +519,16 @@ def main():
         kw = load_keywords(a.keywords)
         fixed = fix_timings(words)
         test = lambda w: is_highlight(w, kw)
-        ed_spec = remap_spec(json.loads(Path(a.editorial).read_text()), remap)
+        load = lambda f: (edl[0](json.loads(Path(f).read_text())) if edl
+                          else remap_spec(json.loads(Path(f).read_text()), remap))
+        ed_spec = load(a.editorial)
         editorial.build_front_ass(fixed, ass, st, test, total := duration(src), lockups=ed_spec)
         print("4/4 Rendu 1080x1920 éditorial")
         out = ROOT / "output" / f"{name}_editorial.mp4"
         editorial.render_editorial(src, ass, str(out), fixed, joins, [w["start"] for w in fixed if test(w)],
                                    ed_spec, st, has_audio(src),
-                                   remap_spec(json.loads(Path(a.broll).read_text()), remap) if a.broll else (),
-                                   remap_spec(json.loads(Path(a.widgets).read_text()), remap) if a.widgets else ())
+                                   load(a.broll) if a.broll else (),
+                                   load(a.widgets) if a.widgets else ())
         print(f"\n✅ {out}  ({duration(out):.1f}s)")
         return
 

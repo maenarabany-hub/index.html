@@ -1,0 +1,194 @@
+[
+ {
+  "label": "Pour l'instant, je suis arrivée",
+  "start": 44.16,
+  "end": 45.82,
+  "words": [
+   {
+    "text": "nulle part",
+    "start": 44.16
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Tout le monde me dit de",
+  "start": 0.0,
+  "end": 4.9,
+  "words": [
+   {
+    "text": "choisir",
+    "start": 0.0
+   },
+   {
+    "text": "UN truc",
+    "start": 2.3
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Dans ma vie",
+  "start": 13.5,
+  "end": 19.0,
+  "words": [
+   {
+    "text": "sport",
+    "start": 13.6
+   },
+   {
+    "text": "danse",
+    "start": 14.2
+   },
+   {
+    "text": "mannequinat",
+    "start": 16.0
+   },
+   {
+    "text": "matchas",
+    "start": 16.8
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "01 · Le matin",
+  "start": 21.6,
+  "end": 23.45,
+  "words": [
+   {
+    "text": "ordi",
+    "start": 21.6
+   },
+   {
+    "text": "cerveau en feu",
+    "start": 22.9
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "02 · L'après-midi",
+  "start": 23.5,
+  "end": 27.3,
+  "words": [
+   {
+    "text": "la salle",
+    "start": 23.5
+   },
+   {
+    "text": "mascara",
+    "start": 25.7
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "03 · Le soir",
+  "start": 27.35,
+  "end": 31.3,
+  "words": [
+   {
+    "text": "je danse",
+    "start": 27.4
+   },
+   {
+    "text": "je sors",
+    "start": 28.6
+   },
+   {
+    "text": "je découvre",
+    "start": 29.2
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Et entre tout ça",
+  "start": 31.4,
+  "end": 35.2,
+  "words": [
+   {
+    "text": "3h",
+    "start": 31.9
+   },
+   {
+    "text": "le plafond",
+    "start": 32.6
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Et clairement",
+  "start": 36.6,
+  "end": 38.6,
+  "words": [
+   {
+    "text": "pas envie",
+    "start": 37.4
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Mais franchement",
+  "start": 45.9,
+  "end": 47.4,
+  "words": [
+   {
+    "text": "je m'amuse",
+    "start": 46.4
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Dis-moi",
+  "start": 47.5,
+  "end": 51.9,
+  "words": [
+   {
+    "text": "en commentaire",
+    "start": 47.8
+   }
+  ],
+  "size": 280,
+  "y": 400
+ },
+ {
+  "label": "Moi c'est",
+  "start": 6.32,
+  "end": 7.68,
+  "words": [
+   {
+    "text": "Maena",
+    "start": 6.32
+   }
+  ],
+  "y": 400,
+  "size": 330
+ },
+ {
+  "label": "Bienvenue dans",
+  "start": 7.7,
+  "end": 8.5,
+  "words": [
+   {
+    "text": "Becoming Her",
+    "start": 7.7
+   }
+  ],
+  "y": 400,
+  "size": 300
+ }
+]
