@@ -135,7 +135,7 @@ class Captions:
                 im = self._small(g, "before", len(g["before"]))   # la ligne entière, en fondu doux
                 if im:
                     img, pad = im
-                    q = ease_out((t - g["before"][0]["start"]) / 0.45)
+                    q = ease_out((t - g["before"][0]["start"]) / 0.3)
                     sh = img.shape[0] - 2 * pad
                     sw = img.shape[1] - 2 * pad
                     cx = min(max(x0 + sw / 2, 60 + sw / 2), W - 60 - sw / 2)   # reste dans l'écran
@@ -143,19 +143,20 @@ class Captions:
             # 2) grand mot, quand il est prononcé
             ks = g["key"][0]["start"]
             if t >= ks - 0.02:
-                p = ease_out((t - ks) / 0.5)
+                p = ease_out((t - ks) / 0.3)
                 img = big
-                if p < 0.98:   # arrive flou puis net (mise au point)
+                if p < 0.97:   # arrive légèrement flou puis net (mise au point rapide)
                     import cv2
-                    k = int(1 + 14 * (1 - p)) * 2 + 1
+                    k = int(1 + 9 * (1 - p)) * 2 + 1
                     img = cv2.GaussianBlur(big, (k, k), 0)
-                over(canvas, img, W / 2, yb + 18 * (1 - p), p * fade, 1.03 - 0.03 * p)
+                alpha = min(1.0, (t - ks) / 0.15)
+                over(canvas, img, W / 2, yb + 14 * (1 - p), alpha * fade, 1.025 - 0.025 * p)
             # 3) petits mots après, en italique, alignés à droite, en dessous
             if g["after"] and t >= g["after"][0]["start"] - 0.02:
                 im = self._small(g, "after", len(g["after"]))
                 if im:
                     img, pad = im
-                    q = ease_out((t - g["after"][0]["start"]) / 0.45)
+                    q = ease_out((t - g["after"][0]["start"]) / 0.3)
                     fade_a = fade * q
                     sh = img.shape[0] - 2 * pad
                     sw = img.shape[1] - 2 * pad
