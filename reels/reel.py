@@ -374,6 +374,7 @@ def main():
     ap.add_argument("--words", help="words.json existant (saute la transcription)")
     ap.add_argument("--motion", help="calques motion design (projets/<nom>/motion.json)")
     ap.add_argument("--editorial", help="preset éditorial : grands mots derrière la personne (projets/<nom>/editorial.json)")
+    ap.add_argument("--broll", help="illustrations : projets/<nom>/broll.json")
     ap.add_argument("--simple", action="store_true", help="rendu simple sans motion design")
     ap.add_argument("--no-silence-cut", action="store_true")
     a = ap.parse_args()
@@ -421,7 +422,8 @@ def main():
         print("4/4 Rendu 1080x1920 éditorial")
         out = ROOT / "output" / f"{name}_editorial.mp4"
         editorial.render_editorial(src, ass, str(out), fixed, joins, [w["start"] for w in fixed if test(w)],
-                                   json.loads(Path(a.editorial).read_text()), st, has_audio(src))
+                                   json.loads(Path(a.editorial).read_text()), st, has_audio(src),
+                                   json.loads(Path(a.broll).read_text()) if a.broll else ())
         print(f"\n✅ {out}  ({duration(out):.1f}s)")
         return
 

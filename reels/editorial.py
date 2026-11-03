@@ -253,17 +253,96 @@ def dim_background(img, st):
     return (img * 0.6 + gray * 0.4) * k
 
 
-def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st, has_audio=True):
+class BRoll:
+    """Plan d'illustration : remplace l'image (le son de la voix continue)."""
+
+    def __init__(self, e, W, H, fps):
+        self.file, self.start, self.end = e["file"], e["start"], e["end"]
+        self.offset, self.W, self.H, self.fps = e.get("offset", 0.0), W, H, fps
+        self.zoom = e.get("zoom", [1.0, 1.08])
+        self.proc, self.last = None, None
+
+    def covers(self, t):
+        return self.start <= t < self.end
+
+    def frame(self):
+        if self.proc is None:
+            vf = (f"scale={self.W}:{self.H}:force_original_aspect_ratio=increase,crop={self.W}:{self.H},"
+                  f"fps={self.fps}")
+            self.proc = subprocess.Popen(
+                ["ffmpeg", "-v", "error", "-ss", str(self.offset), "-i", self.file, "-an", "-vf", vf,
+                 "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], stdout=subprocess.PIPE)
+        buf = self.proc.stdout.read(self.W * self.H * 3)
+        if len(buf) == self.W * self.H * 3:
+            self.last = np.frombuffer(buf, np.uint8).reshape(self.H, self.W, 3)
+        return self.last  # si le clip est trop court : on fige la dernière image
+
+    def close(self):
+        if self.proc:
+            self.proc.kill()
+
+
+WIDE = [(1.00, 0.0, 0.0), (1.05, 0.02, -0.01), (1.03, -0.02, 0.0)]
+TIGHT = [(1.00, 0.0, 0.0), (1.12, 0.0, -0.03), (1.06, 0.03, -0.01), (1.15, -0.02, -0.04)]
+
+
+class EdCamera:
+    """Cadrage stable : changements de zoom UNIQUEMENT sur les cuts (aux fins de phrase),
+    plans larges pendant les grands titres, rien pendant les illustrations."""
+
+    def __init__(self, words, total, joins, lock, brolls, kw_times, st):
+        every = st.get("ed_cut_every", 3.0)
+        gaps = [(words[i]["end"] + words[i + 1]["start"]) / 2 for i in range(len(words) - 1)]
+        strong = [g for i, g in enumerate(gaps) if re.search(r"[.,!?;:]$", words[i]["w"])]
+        busy = [(b.start - 0.5, b.end + 0.5) for b in brolls]
+        cuts, last = [], 0.0
+        for g in strong + gaps:  # d'abord les fins de phrase, puis les autres blancs si besoin
+            if g - last < every * 0.8 or any(a <= g <= b for a, b in busy):
+                continue
+            if all(abs(g - c) >= every * 0.8 for c in cuts):
+                cuts.append(g)
+        self.bounds = [0.0] + sorted(c for c in cuts if c < total - 1.0) + [total]
+        self.framing = []
+        for i in range(len(self.bounds) - 1):
+            a, b = self.bounds[i], self.bounds[i + 1]
+            titled = any(it["start"] < b and it["end"] > a for it in lock.items)
+            pool = WIDE if titled else TIGHT
+            self.framing.append(pool[i % len(pool)])
+        self.joins = [j for j in joins if not any(br.start - 0.05 <= j <= br.end + 0.05 for br in brolls)]
+        self.kw = kw_times
+        self.drift = st.get("motion_drift", 0.02)
+
+    def at(self, t):
+        i = max(k for k, b in enumerate(self.bounds[:-1]) if b <= t + 1e-6)
+        a, b = self.bounds[i], self.bounds[i + 1]
+        z, dx, dy = self.framing[i]
+        z *= 1 + self.drift * (t - a) / max(b - a, 0.01)
+        for k in self.kw:
+            if 0 <= t - k < 0.35:
+                x = (t - k) / 0.35
+                z *= 1 + 0.025 * math.sin(math.pi * min(x * 2.2, 1)) * (1 - x) ** 0.5
+        blur = 0.0
+        for j in self.joins:   # raccord non couvert : zoom flou court, sans flash
+            d = t - j
+            if -0.15 < d < 0.18:
+                p = ease_out(1 - abs(d) / (0.15 if d < 0 else 0.18))
+                z *= 1 + 0.18 * p
+                blur = max(blur, p)
+        return z, dx, dy, blur
+
+
+def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st, has_audio=True, broll_spec=()):
     import cv2
 
     W, H, fps = st["width"], st["height"], st["fps"]
     total = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                                   "-of", "csv=p=0", src], capture_output=True, text=True).stdout)
-    cuts = motion.plan_cuts(words, total, st["cut_every"], joins)
-    cam = motion.Camera(cuts, total, keyword_times, joins, st)
     lock = Lockups(spec, st)
+    brolls = [BRoll(e, W, H, fps) for e in broll_spec]
+    cam = EdCamera(words, total, joins, lock, brolls, keyword_times, st)
     seg = Segmenter()
-    print(f"  {len(cuts)} cuts, {len(spec)} grands titres derrière, détourage mediapipe")
+    print(f"  {len(cam.bounds) - 2} cuts, {len(brolls)} illustrations, {len(spec)} grands titres, "
+          f"{len(cam.joins)} raccord(s) visibles")
 
     dec = subprocess.Popen(["ffmpeg", "-v", "error", "-i", src, "-vf",
                             f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={fps}",
@@ -278,16 +357,22 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
                 "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart", "-shortest", dst]
     enc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
 
-    size, n, head_top = W * H * 3, 0, None
+    size, n, head_top, source = W * H * 3, 0, None, None
     while True:
         buf = dec.stdout.read(size)
         if len(buf) < size:
             break
-        frame = np.frombuffer(buf, np.uint8).reshape(H, W, 3)
         t = n / fps
-        z, dx, dy, blur, flash = cam.at(t)
-        if lock.active(t) and blur < 0.05:      # pendant un grand titre : cadrage plus large
-            z, dy = min(z, st.get("ed_max_zoom_titles", 1.06)), max(dy, -0.01)
+        br = next((b for b in brolls if b.covers(t)), None)
+        if br is not None:
+            frame = br.frame()
+            p = (t - br.start) / max(br.end - br.start, 0.01)
+            z, dx, dy, blur = br.zoom[0] + (br.zoom[1] - br.zoom[0]) * p, 0.0, 0.0, 0.0
+        else:
+            frame = np.frombuffer(buf, np.uint8).reshape(H, W, 3)
+            z, dx, dy, blur = cam.at(t)
+        if source is not br:            # changement de source : on repart à zéro pour le détourage
+            seg.prev, head_top, source = None, None, br
         cx, cy = W * (0.5 + dx), H * (0.40 + dy)
 
         def warp(zz):
@@ -297,7 +382,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
         if blur > 0.05:
             acc = np.zeros((H, W, 3), np.float32)
             for s in range(5):
-                acc += warp(z * (1 + 0.06 * blur * s / 4))
+                acc += warp(z * (1 + 0.05 * blur * s / 4))
             base8 = (acc / 5).astype(np.uint8)
         else:
             base8 = warp(z)
@@ -305,18 +390,22 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
         if st.get("ed_grade", False):
             base = grade(base, W, H)
 
-        mask = seg.person(base8)
-        head_top = top_of_head(mask, head_top)
-        behind = dim_background(base, st)
-        lock.draw_behind(behind, t, W, head_top)
-        out = base * mask + behind * (1 - mask)
-        lock.draw_front(out, t, W)
-        if flash > 0:
-            out = out * (1 - flash) + 255 * flash
+        if lock.active(t):
+            mask = seg.person(base8)
+            head_top = top_of_head(mask, head_top)
+            behind = dim_background(base, st)
+            lock.draw_behind(behind, t, W, head_top)
+            out = base * mask + behind * (1 - mask)
+            lock.draw_front(out, t, W)
+        else:
+            seg.prev, head_top = None, None
+            out = base
         enc.stdin.write(np.clip(out, 0, 255).astype(np.uint8).tobytes())
         n += 1
         if n % (fps * 5) == 0:
             print(f"    {t:5.1f}s", flush=True)
+    for b in brolls:
+        b.close()
     enc.stdin.close()
     enc.wait()
     dec.wait()
