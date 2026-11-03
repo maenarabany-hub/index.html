@@ -26,33 +26,33 @@
  {
   "text": "SPORT",
   "start": 13.64,
-  "end": 19.1,
-  "style": "Chip",
-  "y": 280,
+  "end": 14.18,
+  "style": "Title",
+  "y": 300,
   "anim": "slide"
  },
  {
   "text": "DANSE URBAINE",
   "start": 14.18,
-  "end": 19.1,
-  "style": "Chip",
-  "y": 385,
+  "end": 16.0,
+  "style": "Title",
+  "y": 300,
   "anim": "slide"
  },
  {
   "text": "MANNEQUINAT",
   "start": 16.0,
-  "end": 19.1,
-  "style": "Chip",
-  "y": 490,
+  "end": 16.78,
+  "style": "Title",
+  "y": 300,
   "anim": "slide"
  },
  {
   "text": "MATCHAS (TROP CHERS)",
   "start": 16.78,
   "end": 19.1,
-  "style": "Chip",
-  "y": 595,
+  "style": "Title",
+  "y": 300,
   "anim": "slide"
  },
  {
@@ -112,7 +112,7 @@
   "anim": "slide"
  },
  {
-  "text": "DIS-MOI EN COMMENTAIRE ↓",
+  "text": "DIS-MOI EN\nCOMMENTAIRE ↓",
   "start": 47.52,
   "end": 51.9,
   "style": "Title",
