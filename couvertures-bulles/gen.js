@@ -12,11 +12,12 @@ const hanger=`<svg viewBox="0 0 200 200"><path d="M86 52 a14 14 0 1 1 22 12 c-6 
 const matcha=`<svg viewBox="0 0 200 200"><path d="M24 96 H176 C176 146 144 176 100 176 C56 176 24 146 24 96Z" ${S}/><path d="M36 96 C70 84 130 84 164 96Z" fill="${R}" opacity=".85"/><path d="M78 76 C68 62 88 50 78 34 M104 74 C94 58 116 46 104 26 M130 76 C120 62 140 50 130 34" ${S} stroke-width="5" opacity=".8"/><path d="M148 140 C160 128 178 128 186 120 C184 136 168 150 148 140Z" fill="${R}"/></svg>`;
 const ballet=`<svg viewBox="0 0 200 200"><circle cx="104" cy="34" r="16" fill="${R}"/><path d="M100 56 L94 112 M96 66 C120 54 140 36 150 14 M96 70 C76 80 58 84 38 76 M94 112 L60 186 M94 112 C120 118 150 112 176 96" ${S}/><path d="M80 118 C88 104 104 104 112 118" ${S} stroke-width="5"/></svg>`;
 const column=`<svg viewBox="0 0 200 200"><circle cx="150" cy="44" r="22" fill="${R}"/><path d="M40 70 H130 M46 82 H124 M56 82 V164 M76 82 V164 M94 82 V164 M114 82 V164 M44 164 H126 M36 180 H134" ${S}/><path d="M36 70 C40 60 50 60 54 66 M134 70 C130 60 120 60 116 66" ${S} stroke-width="5"/></svg>`;
+const lunettes=`<svg viewBox="0 0 200 200"><path d="M16 92 H184" ${S}/><path d="M24 92 H90 C90 128 76 146 56 146 C34 146 24 126 24 92Z" fill="${R}"/><path d="M110 92 H176 C176 126 166 146 144 146 C124 146 110 128 110 92Z" fill="${R}"/><path d="M90 98 C96 90 104 90 110 98" ${S} stroke-width="5"/><path d="M150 30 l5 14 14 5 -14 5 -5 14 -5 -14 -14 -5 14 -5Z" fill="${R}"/></svg>`;
 // [fichier, mot (Noto Serif), taille, étiquette (CY Grotesk), icône]
 const covers=[
  ['me','Me',300,'Maena',mirror],
  ['collabs','Collabs',175,'Marques & co',collab],
- ['her','Her',300,'Soirées',martini],
+ ['her','Her',300,'Lifestyle',lunettes],
  ['becoming','Becoming',145,'Chaque lundi',cherry],
  ['annecy','Annecy',180,'À croquer',fork],
  ['sport','Sport',300,'Move',dumbbell],
