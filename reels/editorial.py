@@ -156,7 +156,7 @@ class Lockups:
 
 
 # ------------------------------------------------------------ sous-titres
-def phrase_groups(words, kw_test, max_words=6, max_gap=0.5, min_dur=1.3):
+def phrase_groups(words, kw_test, max_words=8, max_gap=0.6, min_dur=1.8):
     """Groupes de mots lisibles : on coupe aux fins de phrase, et on fusionne les groupes trop
     courts (même phrase, même morceau du montage)."""
     groups, cur = [], []
@@ -177,7 +177,14 @@ def phrase_groups(words, kw_test, max_words=6, max_gap=0.5, min_dur=1.3):
                 merged[-1] = p + g
                 continue
         merged.append(g)
-    return merged
+    out = []   # un ou deux mots orphelins en fin de phrase : on les rattache au groupe d'avant
+    for g in merged:
+        if out and len(g) <= 2 and not re.search(r"[.!?]$", out[-1][-1]["w"]) \
+                and out[-1][0].get("_seg") == g[0].get("_seg") and len(out[-1]) + len(g) <= 10:
+            out[-1] = out[-1] + g
+        else:
+            out.append(g)
+    return out
 
 
 def _toks(s):
@@ -212,10 +219,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         g0 = g[0]["start"]
         gt = [x for w in g for x in _toks(w["w"])]
         dup = False
+        g_end = g[-1]["end"]
         for L in lockups:   # le titre à l'écran dit déjà la même chose -> pas de sous-titre
-            if L["start"] - 0.05 <= g0 <= L["end"]:
+            inter = min(g_end, L["end"]) - max(g0, L["start"])
+            if inter > 0.4 * max(g_end - g0, 0.1):
                 lt = set(_toks(L.get("label", "")) + [x for w in L["words"] for x in _toks(w["text"])])
-                if gt and sum(x in lt for x in gt) / len(gt) >= 0.6:
+                if gt and sum(x in lt for x in gt) / len(gt) >= 0.3:
                     dup = True
         if dup:
             continue
