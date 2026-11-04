@@ -27,6 +27,12 @@ def hex_rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
+def smooth(x):
+    """Courbe douce (départ et arrivée lents)."""
+    x = min(max(x, 0.0), 1.0)
+    return x * x * x * (x * (6 * x - 15) + 10)
+
+
 def ease_out(x):
     x = min(max(x, 0.0), 1.0)
     return 1 - (1 - x) ** 3
@@ -100,14 +106,14 @@ class Lockups:
         self.safe_top = st.get("ed_safe_top", 255)   # la grille Instagram (3:4) coupe 240 px en haut
 
     def active(self, t):
-        return any(it["start"] - 0.01 <= t <= it["end"] + 0.2 for it in self.items)
+        return any(it["start"] - 0.01 <= t <= it["end"] + 0.4 for it in self.items)
 
     def draw_behind(self, canvas, t, W, head_top=None):
         for it in self.items:
-            if not (it["start"] - 0.01 <= t <= it["end"] + 0.2):
+            if not (it["start"] - 0.01 <= t <= it["end"] + 0.4):
                 it.pop("locked", None)
                 continue
-            out_a = 1 - ease_out((t - it["end"]) / 0.18) if t > it["end"] else 1.0
+            out_a = 1 - smooth((t - it["end"]) / 0.4) if t > it["end"] else 1.0
             cur = [w for w in it["words"] if w[0] <= t + 1e-3]
             if not cur:
                 continue
@@ -122,22 +128,23 @@ class Lockups:
                 y_min = self.safe_top + lab_h / 2 + 0.42 * h if lab_h else self.safe_top + h * 0.35
                 locked[ws] = max(y_min, min(y, it["y"] + 260))
             it["cur_y"], it["cur_h"] = locked[ws], img.shape[0]
-            p = 1.0 if it["start"] <= 0.01 and ws <= 0.01 else ease_out((t - ws) / 0.35)  # 1re image : déjà en place
-            scale = (1.18 - 0.18 * p) * (1 + 0.03 * (t - ws) / 3)   # arrive en dézoomant + dérive
-            alpha = (1.0 if it["start"] <= 0.01 and ws <= 0.01 else min(1.0, (t - ws) / 0.15)) * out_a
-            if len(cur) > 1 and t - ws < 0.15:   # l'ancien mot s'efface pendant que le nouveau arrive
+            first = it["start"] <= 0.01 and ws <= 0.01
+            p = 1.0 if first else smooth((t - ws) / 0.6)                # arrivée lente
+            scale = (1.05 - 0.05 * p) * (1 + 0.02 * min(t - ws, 4) / 4)  # léger dézoom + dérive lente
+            alpha = (1.0 if first else smooth((t - ws) / 0.4)) * out_a
+            if len(cur) > 1 and t - ws < 0.4:    # fondu enchaîné doux entre deux mots
                 pws, pimg = cur[-2]
                 py = locked.get(pws, it["cur_y"])
-                q = (t - ws) / 0.15
-                over(canvas, pimg, W / 2, py - 20 * q, (1 - q) * out_a, (1 + 0.03 * (ws - pws) / 3) * (1 - 0.06 * q))
-            over(canvas, img, W / 2, it["cur_y"] + 30 * (1 - p), alpha, scale)
+                q = smooth((t - ws) / 0.4)
+                over(canvas, pimg, W / 2, py - 14 * q, (1 - q) * out_a, (1 + 0.02 * min(ws - pws, 4) / 4))
+            over(canvas, img, W / 2, it["cur_y"] + 16 * (1 - p), alpha, scale)
 
     def draw_front(self, canvas, t, W):
         for it in self.items:
-            if it["label"] is None or not (it["start"] <= t <= it["end"] + 0.2):
+            if it["label"] is None or not (it["start"] <= t <= it["end"] + 0.4):
                 continue
-            out_a = 1 - ease_out((t - it["end"]) / 0.18) if t > it["end"] else 1.0
-            p = 1.0 if it["start"] <= 0.01 else ease_out((t - it["start"]) / 0.3)
+            out_a = 1 - smooth((t - it["end"]) / 0.4) if t > it["end"] else 1.0
+            p = 1.0 if it["start"] <= 0.01 else smooth((t - it["start"]) / 0.55)
             lab = it["label"]
             # révélation de la boîte de gauche à droite
             vis = max(1, int(lab.shape[1] * p))
@@ -149,17 +156,28 @@ class Lockups:
 
 
 # ------------------------------------------------------------ sous-titres
-def phrase_groups(words, kw_test, max_words=4, max_gap=0.5):
+def phrase_groups(words, kw_test, max_words=6, max_gap=0.5, min_dur=1.3):
+    """Groupes de mots lisibles : on coupe aux fins de phrase, et on fusionne les groupes trop
+    courts (même phrase, même morceau du montage)."""
     groups, cur = [], []
     for i, w in enumerate(words):
         cur.append(w)
         nxt = words[i + 1] if i + 1 < len(words) else None
         end_punct = re.search(r"[.,!?;:]$", w["w"])
-        if (len(cur) >= max_words or end_punct or nxt is None or nxt["start"] - w["end"] > max_gap
-                or kw_test(w)):
+        if (len(cur) >= 4 or end_punct or nxt is None or nxt["start"] - w["end"] > max_gap
+                or nxt.get("_seg") != w.get("_seg")):
             groups.append(cur)
             cur = []
-    return groups
+    merged = []
+    for g in groups:
+        if merged:
+            p = merged[-1]
+            if (g[0]["start"] - p[0]["start"] < min_dur and len(p) + len(g) <= max_words
+                    and not re.search(r"[.!?]$", p[-1]["w"]) and p[0].get("_seg") == g[0].get("_seg")):
+                merged[-1] = p + g
+                continue
+        merged.append(g)
+    return merged
 
 
 def _toks(s):
@@ -178,12 +196,12 @@ def build_front_ass(words, out_ass, st, kw_test, total, cta=None, lockups=()):
 ScriptType: v4.00+
 PlayResX: {W}
 PlayResY: {H}
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,Inter Medium,80,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,0,0,1,0,3,5,60,60,0,1
+Style: Sub,Inter Medium,76,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,0,0,0,0,100,100,0,0,1,0,3,5,60,60,0,1
 Style: Handle,Inter Medium,38,&H60FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,2,0,1,0,0,2,0,0,250,1
 
 [Events]
@@ -201,22 +219,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     dup = True
         if dup:
             continue
-        g1 = max(g[-1]["end"] + 0.15, g0 + 0.3)
+        g0 = max(0.0, g0 - 0.12)                        # arrive un peu avant la voix
+        g1 = max(g[-1]["end"] + 0.5, g0 + 1.1)          # reste le temps d'être lu
         nxt = [w for w in words if w["start"] > g[-1]["start"]]
         if nxt:
-            g1 = min(g1 + 0.35, nxt[0]["start"])
+            g1 = min(g1, nxt[0]["start"] - 0.12)
         parts = []
         for w in g:
             txt = re.sub(r"[.,;:…—]+$", "", w["w"]).replace("{", "(").replace("}", ")")
-            d = int((w["start"] - g0) * 1000)
-            reveal = f"\\alpha&HFF&\\t({d},{d + 90},\\alpha&H00&)"
+            d = max(0, int((w["start"] - g0) * 1000))
+            reveal = f"\\alpha&HFF&\\t({d},{d + 220},\\alpha&H00&)"
             if kw_test(w):
                 parts.append(f"{{\\fnNoto Serif Display Medium\\i1\\fs126\\c{pink}{reveal}}}{txt}{{\\r}}")
             else:
                 parts.append(f"{{{reveal}}}{txt}")
         line = " ".join(parts)
         ev.append(f"Dialogue: 1,{motion._ts(g0)},{motion._ts(g1)},Sub,,0,0,0,,"
-                  f"{{\\an5\\pos({W // 2},{y})\\fad(0,80)}}{line}")
+                  f"{{\\an5\\move({W // 2},{y + 10},{W // 2},{y},0,300)\\fad(150,200)}}{line}")
     if st.get("handle"):
         ev.append(f"Dialogue: 0,{motion._ts(0)},{motion._ts(total)},Handle,,0,0,0,,{st['handle']}")
     Path(out_ass).write_text(head + "\n".join(ev) + "\n", encoding="utf-8")
