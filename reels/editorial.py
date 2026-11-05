@@ -104,16 +104,28 @@ class Lockups:
             self.items.append({"start": e["start"], "end": e["end"], "y": e.get("y", 560),
                                "words": words, "label": label})
         self.safe_top = st.get("ed_safe_top", 255)   # la grille Instagram (3:4) coupe 240 px en haut
+        self.set_exits([])
+
+    def set_exits(self, cut_points):
+        """Durée de sortie de chaque titre : jamais sur le titre suivant, et coupée net
+        quand l'image change (fin d'un B-roll)."""
+        items = sorted(self.items, key=lambda x: x["start"])
+        for i, it in enumerate(items):
+            nxt = items[i + 1]["start"] if i + 1 < len(items) else 1e9
+            ex = min(0.4, max(0.0, nxt - it["end"]))
+            if any(abs(c - it["end"]) < 0.08 for c in cut_points):
+                ex = 0.0
+            it["exit"] = ex
 
     def active(self, t):
-        return any(it["start"] - 0.01 <= t <= it["end"] + 0.4 for it in self.items)
+        return any(it["start"] - 0.01 <= t <= it["end"] + it["exit"] for it in self.items)
 
     def draw_behind(self, canvas, t, W, head_top=None):
         for it in self.items:
-            if not (it["start"] - 0.01 <= t <= it["end"] + 0.4):
+            if not (it["start"] - 0.01 <= t <= it["end"] + it["exit"]):
                 it.pop("locked", None)
                 continue
-            out_a = 1 - smooth((t - it["end"]) / 0.4) if t > it["end"] else 1.0
+            out_a = 1 - smooth((t - it["end"]) / max(it["exit"], 1e-3)) if t > it["end"] else 1.0
             cur = [w for w in it["words"] if w[0] <= t + 1e-3]
             if not cur:
                 continue
@@ -141,9 +153,9 @@ class Lockups:
 
     def draw_front(self, canvas, t, W):
         for it in self.items:
-            if it["label"] is None or not (it["start"] <= t <= it["end"] + 0.4):
+            if it["label"] is None or not (it["start"] <= t <= it["end"] + it["exit"]):
                 continue
-            out_a = 1 - smooth((t - it["end"]) / 0.4) if t > it["end"] else 1.0
+            out_a = 1 - smooth((t - it["end"]) / max(it["exit"], 1e-3)) if t > it["end"] else 1.0
             p = 1.0 if it["start"] <= 0.01 else smooth((t - it["start"]) / 0.55)
             lab = it["label"]
             # révélation de la boîte de gauche à droite
@@ -459,6 +471,7 @@ def render_editorial(src, front_ass, dst, words, joins, keyword_times, spec, st,
                                   "-of", "csv=p=0", src], capture_output=True, text=True).stdout)
     lock = Lockups(spec, st)
     brolls = [BRoll(e, W, H, fps) for e in broll_spec]
+    lock.set_exits([b.end for b in brolls] + [b.start for b in brolls])
     src_cuts = detect_source_cuts(src) if st.get("ed_mask_source_cuts", True) else []
     # le raccord entre rushes (fondu) n'est pas une coupure à masquer
     src_cuts = [c for c in src_cuts if all(abs(c - j) > 0.15 for j in joins)]
