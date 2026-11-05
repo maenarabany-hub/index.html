@@ -1,6 +1,6 @@
 // Génère les couvertures des bulles à la une (1080x1920) : node gen.js
 const {chromium}=require('playwright');const fs=require('fs');
-const R='#E8B0B0',C='#8E2A30';
+const R='#5A3B2A',C='#8B5E3C';
 const S=`fill="none" stroke="${R}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"`;
 const cherry=`<svg viewBox="0 0 200 200"><path d="M100 30 C90 70 70 95 62 120 M100 30 C110 70 128 100 138 125" ${S}/><path d="M100 30 C120 18 150 22 162 40 C140 48 118 44 100 30Z" fill="${R}"/><circle cx="60" cy="148" r="34" fill="${R}"/><circle cx="140" cy="150" r="34" fill="${R}"/><path d="M46 136 a16 16 0 0 1 14 -10 M126 138 a16 16 0 0 1 14 -10" stroke="#561519" stroke-width="6" fill="none" stroke-linecap="round"/></svg>`;
 const mirror=`<svg viewBox="0 0 200 200"><ellipse cx="100" cy="82" rx="52" ry="64" ${S}/><path d="M100 146 V188 M74 188 H126" ${S}/><path d="M78 64 l16 -16 M82 86 l30 -30" stroke="${R}" stroke-width="6" stroke-linecap="round" opacity=".7"/></svg>`;
@@ -14,12 +14,13 @@ const ballet=`<svg viewBox="0 0 200 200"><circle cx="104" cy="34" r="16" fill="$
 const column=`<svg viewBox="0 0 200 200"><circle cx="150" cy="44" r="22" fill="${R}"/><path d="M40 70 H130 M46 82 H124 M56 82 V164 M76 82 V164 M94 82 V164 M114 82 V164 M44 164 H126 M36 180 H134" ${S}/><path d="M36 70 C40 60 50 60 54 66 M134 70 C130 60 120 60 116 66" ${S} stroke-width="5"/></svg>`;
 const lunettes=`<svg viewBox="0 0 200 200"><path d="M16 92 H184" ${S}/><path d="M24 92 H90 C90 128 76 146 56 146 C34 146 24 126 24 92Z" fill="${R}"/><path d="M110 92 H176 C176 126 166 146 144 146 C124 146 110 128 110 92Z" fill="${R}"/><path d="M90 98 C96 90 104 90 110 98" ${S} stroke-width="5"/><path d="M150 30 l5 14 14 5 -14 5 -5 14 -5 -14 -14 -5 14 -5Z" fill="${R}"/></svg>`;
 const camera=`<svg viewBox="0 0 200 200"><rect x="22" y="60" width="156" height="112" rx="22" ${S}/><path d="M70 60 L82 38 H118 L130 60" ${S}/><circle cx="100" cy="116" r="32" ${S}/><circle cx="100" cy="116" r="14" fill="${R}"/><circle cx="152" cy="84" r="7" fill="${R}"/></svg>`;
+const miel=`<svg viewBox="0 0 200 200"><path d="M58 70 H142 C166 92 172 140 150 166 C134 184 66 184 50 166 C28 140 34 92 58 70Z" fill="${R}"/><rect x="50" y="52" width="100" height="20" rx="8" fill="${C}"/><path d="M62 72 C62 96 74 98 74 112 C74 124 88 124 88 110 L88 72Z" fill="#E9B65A"/><path d="M128 26 L112 64" stroke="${C}" stroke-width="8" stroke-linecap="round"/><ellipse cx="132" cy="22" rx="12" ry="9" fill="${C}"/><path d="M78 140 C92 132 108 132 122 140" stroke="#E6D8C6" stroke-width="5" fill="none" stroke-linecap="round" opacity=".6"/></svg>`;
 // [fichier, mot (Noto Serif), taille, étiquette (CY Grotesk), icône]
 const covers=[
  ['me','Me',380,'Maena',mirror],
  ['collabs','Collabs',380,'Brands',collab],
  ['her','Her',380,'Lifestyle',lunettes],
- ['becoming','Becoming',380,'Lundi',cherry],
+ ['becoming','Becoming',380,'Lundi',miel],
  ['annecy','Annecy',380,'À croquer',fork],
  ['sport','Sport',380,'Move',dumbbell],
  ['style','Style',380,'Outfits',hanger],
