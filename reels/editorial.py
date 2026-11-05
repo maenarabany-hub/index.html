@@ -385,16 +385,17 @@ class EdCamera:
             a, b = self.bounds[i], self.bounds[i + 1]
             titled = any(it["start"] < b and it["end"] > a for it in lock.items)
             if source_cuts:   # alternance large / serré (serré plus doux sous un grand titre)
+                zt = st.get("ed_cut_zoom", 0.05)   # écart de cadrage minimal pour masquer la coupure
                 if titled:
-                    self.framing.append((1.12, 0.0, -0.40) if i % 2 == 0 else (1.18, 0.0, -0.40))
+                    self.framing.append((1.12, 0.0, -0.40) if i % 2 == 0 else (1.12 + zt, 0.0, -0.40))
                 else:
-                    self.framing.append((1.0, 0.0, 0.0) if i % 2 == 0 else (1.13, 0.0, -0.03))
+                    self.framing.append((1.0, 0.0, 0.0) if i % 2 == 0 else (1.0 + zt + 0.01, 0.0, -0.02))
             else:
                 pool = WIDE if titled else TIGHT
                 self.framing.append(pool[i % len(pool)])
         self.joins = [j for j in joins if not any(br.start - 0.05 <= j <= br.end + 0.05 for br in brolls)]
-        self.kw = kw_times
-        self.drift = st.get("motion_drift", 0.02)
+        self.kw = kw_times if st.get("ed_keyword_zoom", False) else []
+        self.drift = st.get("ed_drift", 0.0)
 
     def at(self, t):
         if self.inout:   # zoom avant / arrière doux, sens alterné à chaque plan
